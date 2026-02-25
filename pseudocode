@@ -1,3 +1,17 @@
 // heat map pseudocode beneath
 
+for each zone:
+boolean made
+int madeTotal
+int Total
+double percent = (double)made / total
 
+1. gain user zone input: zone 1, 2, 3, 4, 5, or 6
+2. gain shot input: made is true or false
+3. add +1 to total shot amount for zone from step 1
+4. if made, add +1 to made shots for zone from step 1
+5. update fg% 
+6. update gradient color based on fg%
+  if fg% approaches 100%, max green
+  if fg% approaches 0%, max red (idk how to code this)
+  maybe yellow is 50%
