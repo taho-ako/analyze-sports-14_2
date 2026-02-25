@@ -12,3 +12,6 @@ double percent = (double)made / total
 4. if made, add +1 to made shots for zone from step 1
 5. update fg% 
 6. update gradient color based on fg%
+  if fg% approaches 100%, max green
+  if fg% approaches 0%, max red (idk how to code this)
+  maybe yellow is 50%
