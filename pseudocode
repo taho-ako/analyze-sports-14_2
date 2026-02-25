@@ -1,4 +1,4 @@
-// heat map pseudocode beneath
+
 On load:
   1. Determine whether role is teacher or student
   2. If teacher: show game control UI
@@ -14,6 +14,9 @@ Rounds
   1. Select player that is shooting (big button)
   2. Select zone from picture
   3. Select result (check or x button)
+
+// heat map pseudocode beneath
+
 
 for each zone:
 boolean made
