@@ -1,4 +1,19 @@
 // heat map pseudocode beneath
+On load:
+  1. Determine whether role is teacher or student
+  2. If teacher: show game control UI
+  3. If student: show start screen
+State of game: 
+  1. phase: setup, round one, round two, results
+  2. teams: players[{id, name}], name
+  3. shots taken [{player, team, zone, made?, round}]
+Setup
+  1. Add players
+  2. Create teams
+Rounds
+  1. Select player that is shooting (big button)
+  2. Select zone from picture
+  3. Select result (check or x button)
 
 for each zone:
 boolean made
