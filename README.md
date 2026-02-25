@@ -1,16 +1,54 @@
-# React + Vite
+🏀 Basketball Data Literacy Game
+A web-based platform designed to help middle and high school students learn data literacy through a physical basketball game. Built with the React + Supabase + Vercel stack.
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+👥 The Team
+University of Virginia Engineering Foundations 2 Team 14_2
 
-Currently, two official plugins are available:
+🚀 Tech Stack
+Frontend: React (via Vite)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+Hosting: Vercel
 
-## React Compiler
+Backend/Database: Supabase
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Realtime: Supabase Realtime (for Kahoot-style updates)
 
-## Expanding the ESLint configuration
+🛠️ Getting Started
+Follow these steps to get the project running on your local machine.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+1. Clone the repository
+Bash
+git clone [YOUR_GITHUB_URL]
+cd [YOUR_REPO_NAME]
+2. Install dependencies
+Bash
+npm install
+3. Setup Environment Variables
+Since we don't push secrets to GitHub, you need to create your own local .env file.
+
+Create a file named .env in the root folder.
+
+Copy the contents of .env.example into .env.
+
+Ask the team lead for the Supabase URL and Anon Key, and paste them in.
+
+4. Run the development server
+Bash
+npm run dev
+The app should now be running at http://localhost:5173.
+
+📁 Project Structure (Current)
+/src
+
+/components - Reusable UI elements.
+
+/pages - Main views (Host Dashboard, Player Join, etc.).
+
+supabaseClient.js - Our connection to the database.
+
+📝 Workflow Rules
+Don't code on main: Create a new branch for every feature (git checkout -b feature/feature-name).
+
+Pull before you push: Always run git pull origin main to make sure you have the latest code.
+
+PRs: Open a Pull Request on GitHub before merging into main.
