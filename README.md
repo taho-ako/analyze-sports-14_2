@@ -1,53 +1,39 @@
-🏀 Basketball Data Literacy Game
-A web-based platform designed to help middle and high school students learn data literacy through a physical basketball game. Built with the React + Supabase + Vercel stack.
+# Sports Analysis App
 
-👥 The Team
-University of Virginia Engineering Foundations 2 Team 14_2
+A web application for tracking sports teams, players, and scoring with data visualization.
 
-🚀 Tech Stack
-Frontend: React (via Vite)
+## Features
 
-Hosting: Vercel
+- Create up to 4 teams with up to 4 players each
+- Interactive scoring with heat map zones
+- Real-time statistics and accuracy tracking
+- Data visualization with charts and tables
 
-Backend/Database: Supabase
+## Tech Stack
 
-Realtime: Supabase Realtime (for Kahoot-style updates)
+- Frontend: React (Vite)
+- Backend: Supabase
+- Hosting: Vercel
+- Charts: Recharts
 
-🛠️ Getting Started
-Follow these steps to get the project running on your local machine.
+## Setup
 
 1. Clone the repository
-Bash
-git clone [YOUR_GITHUB_URL]
-cd [YOUR_REPO_NAME]
-2. Install dependencies
-Bash
-npm install
-3. Setup Environment Variables
-Since we don't push secrets to GitHub, you need to create your own local .env file.
+2. Install dependencies: `npm install`
+3. Set up Supabase:
+   - Create a new Supabase project
+   - Run the SQL in `database-schema.sql` to create tables
+   - Copy your Supabase URL and anon key
+4. Create `.env` file:
+   ```
+   VITE_SUPABASE_URL=your_supabase_url
+   VITE_SUPABASE_ANON_KEY=your_anon_key
+   ```
+5. Run: `npm run dev`
 
-Create a file named .env in the root folder.
+## Database Schema
 
-Copy the contents of .env.example into .env.
-
-Ask the team lead for the Supabase URL and Anon Key, and paste them in.
-
-4. Run the development server
-Bash
-npm run dev
-The app should now be running at http://localhost:5173.
-
-📁 Project Structure (Current)
-/src
-
-/components - Reusable UI elements.
-
-/pages - Main views (Host Dashboard, Player Join, etc.).
-
-supabaseClient.js - Our connection to the database.
-
-📝 Workflow Rules
-Don't code on main: Create a new branch for every feature (git checkout -b feature/feature-name).
+See `database-schema.sql` for the required tables: teams, players, shots.
 
 Pull before you push: Always run git pull origin main to make sure you have the latest code.
 
