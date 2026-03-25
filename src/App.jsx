@@ -8,6 +8,16 @@ function App() {
   return (
     <Router>
       <div className="app">
+        <header className="app-header">
+          <img
+            className="uva-logo"
+            src="uva logo.png"
+            alt="UVA logo"
+            width="64"
+            height="64"
+          />
+          <h1>Analyze Sports</h1>
+        </header>
         <nav>
           <Link to="/">Team Creation</Link>
           <Link to="/scoring">Scoring</Link>

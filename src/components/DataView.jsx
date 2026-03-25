@@ -93,11 +93,15 @@ function DataView() {
   }
 
   return (
-    <div>
+    <div style={{ minHeight: '100vh', padding: '1rem', backgroundColor: 'transparent' }}>
       <h1>Data View</h1>
       {!supabase && <p style={{color: 'red'}}>Using local storage - data will not persist after refresh</p>}
-      <h2>Player Stats</h2>
-      <table>
+      {playerStats.length === 0 ? (
+        <p>No players have been added yet. Add teams and players to see stats here.</p>
+      ) : (
+        <>
+          <h2>Player Stats</h2>
+          <table>
         <thead>
           <tr>
             <th>Player</th>
@@ -173,6 +177,8 @@ function DataView() {
         <Bar dataKey="totalPoints" fill="#8884d8" />
         <Bar dataKey="accuracy" fill="#82ca9d" />
       </BarChart>
+    </>
+  )}
     </div>
   )
 }

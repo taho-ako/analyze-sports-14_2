@@ -8,6 +8,26 @@
   text-align: left;
 }
 
+header.app-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  background-color: #001f3f;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+}
+
+.uva-logo {
+  display: block;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  background: #001f3f;
+  width: auto;
+  height: 64px;
+  object-fit: contain;
+}
+
 nav {
   margin-bottom: 2rem;
 }
