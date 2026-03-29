@@ -6,6 +6,7 @@ function TeamCreation() {
   const [newTeamName, setNewTeamName] = useState('')
   const [selectedTeam, setSelectedTeam] = useState(null)
   const [newPlayerName, setNewPlayerName] = useState('')
+  const [notification, setNotification] = useState(null)
 
   const fetchTeams = useCallback(async () => {
     if (supabase) {
@@ -17,6 +18,11 @@ function TeamCreation() {
       setTeams(localTeams)
     }
   }, [])
+
+  const showNotification = (message) => {
+    setNotification(message)
+    setTimeout(() => setNotification(null), 3000)
+  }
 
   useEffect(() => {
     fetchTeams() // eslint-disable-line react-hooks/exhaustive-deps
@@ -33,10 +39,10 @@ function TeamCreation() {
 
   const createTeam = async () => {
     const trimmedName = newTeamName.trim()
-    if (!trimmedName) return alert('Team name cannot be empty')
-    if (teams.length >= 4) return alert('Maximum 4 teams')
+    if (!trimmedName) return showNotification('Team name cannot be empty')
+    if (teams.length >= 4) return showNotification('Maximum 4 teams')
     const teamExists = teams.some(team => team.name.trim().toLowerCase() === trimmedName.toLowerCase())
-    if (teamExists) return alert('Team name already exists')
+    if (teamExists) return showNotification('Team name already exists')
 
     if (supabase) {
       const { error } = await supabase.from('teams').insert([{ name: trimmedName }])
@@ -55,20 +61,20 @@ function TeamCreation() {
   }
 
   const addPlayer = async () => {
-    if (!selectedTeam) return alert('Select a team first')
+    if (!selectedTeam) return showNotification('Select a team first')
 
     const team = teams.find(t => t.id === selectedTeam.id)
-    if (!team) return alert('Selected team not found')
+    if (!team) return showNotification('Selected team not found')
 
     const trimmedPlayerName = newPlayerName.trim()
-    if (!trimmedPlayerName) return alert('Player name cannot be empty')
+    if (!trimmedPlayerName) return showNotification('Player name cannot be empty')
 
-    if (team.players.length >= 4) return alert('Maximum 4 players per team')
+    if (team.players.length >= 4) return showNotification('Maximum 4 players per team')
 
     const playerExists = teams.some(teamItem =>
       teamItem.players.some(player => player.name.trim().toLowerCase() === trimmedPlayerName.toLowerCase())
     )
-    if (playerExists) return alert('A player with that name already exists')
+    if (playerExists) return showNotification('A player with that name already exists')
 
     if (supabase) {
       const { error } = await supabase.from('players').insert([{ name: trimmedPlayerName, team_id: selectedTeam.id }])
@@ -114,9 +120,9 @@ function TeamCreation() {
     if (fromTeamId === toTeamId) return
     const fromTeam = teams.find(t => t.id === fromTeamId || t.id === Number(fromTeamId))
     const toTeam = teams.find(t => t.id === toTeamId || t.id === Number(toTeamId))
-    if (!fromTeam || !toTeam) return alert('Team not found')
+    if (!fromTeam || !toTeam) return showNotification('Team not found')
 
-    if (toTeam.players.length >= 4) return alert('Destination team already has 4 players')
+    if (toTeam.players.length >= 4) return showNotification('Destination team already has 4 players')
 
     if (supabase) {
       const { error } = await supabase.from('players').update({ team_id: toTeamId }).eq('id', playerId)
@@ -147,6 +153,51 @@ function TeamCreation() {
     <div>
       <h1>Team Creation</h1>
       {!supabase && <p style={{color: 'red'}}>Using local storage - data will not persist after refresh</p>}
+      {notification && (
+        <div style={{
+          position: 'fixed',
+          top: '20px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          backgroundColor: '#ff4444',
+          color: 'white',
+          padding: '16px 24px',
+          borderRadius: '8px',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          zIndex: 1000,
+          fontWeight: '500',
+          animation: 'slideDown 0.3s ease-out',
+        }}>
+          {notification}
+          <button
+            onClick={() => setNotification(null)}
+            style={{
+              marginLeft: '12px',
+              backgroundColor: 'transparent',
+              border: 'none',
+              color: 'white',
+              cursor: 'pointer',
+              fontSize: '18px',
+              padding: '0',
+              lineHeight: '1',
+            }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+      <style>{`
+        @keyframes slideDown {
+          from {
+            opacity: 0;
+            transform: translateX(-50%) translateY(-20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+          }
+        }
+      `}</style>
       <div>
         <input value={newTeamName} onChange={(e) => setNewTeamName(e.target.value)} placeholder="Team Name" />
         <button onClick={createTeam}>Create Team</button>
