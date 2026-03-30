@@ -5,6 +5,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'rec
 function DataView() {
   const [playerStats, setPlayerStats] = useState([])
   const [teamStats, setTeamStats] = useState([])
+  const [zoneDistribution, setZoneDistribution] = useState([])
 
   const fetchData = useCallback(async () => {
     let playersData, teamsData
@@ -90,6 +91,24 @@ function DataView() {
       }
     })
     setTeamStats(tStats)
+
+    // Zone distribution - percentage of all shots per zone, plus made/total
+    const allShots = playersData.flatMap(p => p.shots)
+    const totalAllShots = allShots.length
+    const zDist = []
+    for (let z = 1; z <= 6; z++) {
+      const zoneShotsArr = allShots.filter(s => s.zone === z)
+      const zoneShots = zoneShotsArr.length
+      const made = zoneShotsArr.filter(s => s.made).length
+      const accuracy = zoneShots > 0 ? (made / zoneShots * 100) : 0
+      zDist.push({
+        zone: `Zone ${z}`,
+        accuracy: parseFloat(accuracy.toFixed(1)),
+        made,
+        total: zoneShots
+      })
+    }
+    setZoneDistribution(zDist)
   }
 
   return (
@@ -161,6 +180,30 @@ function DataView() {
         <Legend />
         <Bar dataKey="totalPoints" fill="#8884d8" />
         <Bar dataKey="accuracy" fill="#82ca9d" />
+      </BarChart>
+
+      <h2>Shot Distribution by Zone</h2>
+      <BarChart width={800} height={400} data={zoneDistribution}>
+        <CartesianGrid strokeDasharray="3 3" />
+        <XAxis dataKey="zone" />
+        <YAxis domain={[0, 100]} ticks={[0, 20, 40, 60, 80, 100]} label={{ value: 'Accuracy (%)', angle: -90, position: 'insideLeft' }} />
+        <Tooltip 
+          content={({ active, payload, label }) => {
+            if (active && payload && payload.length) {
+              const { accuracy, made, total } = payload[0].payload
+              return (
+                <div style={{ background: '#fff', border: '1px solid #ccc', padding: 10, color: '#000' }}>
+                  <div><strong>{label}</strong></div>
+                  <div>Accuracy: {accuracy}%</div>
+                  <div>Shots Made / Shots Taken: ({made}/{total})</div>
+                </div>
+              )
+            }
+            return null
+          }}
+        />
+        <Legend />
+        <Bar dataKey="accuracy" fill="#ffc658" name="Accuracy" />
       </BarChart>
 
       <h2>Player Comparison</h2>
