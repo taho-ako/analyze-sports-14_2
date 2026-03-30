@@ -2,15 +2,14 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../supabaseClient'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar,
-  PieChart, Pie, Cell, LineChart, Line,
-  ScatterChart, Scatter,
-  ComposedChart
+  PieChart, Pie, Cell
 } from 'recharts'
 
 function DataView() {
   const [playerStats, setPlayerStats] = useState([])
   const [teamStats, setTeamStats] = useState([])
+  const [teams, setTeams] = useState([])
+  const [selectedTeam, setSelectedTeam] = useState(null)
 
   const fetchData = useCallback(async () => {
     let playersData, teamsData
@@ -40,6 +39,7 @@ function DataView() {
 
     // Calculate stats
     if (playersData && teamsData) {
+      setTeams(teamsData)
       calculateStats(playersData, teamsData)
     }
   }, [])
@@ -100,319 +100,254 @@ function DataView() {
 
   const COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff7c7c', '#8dd1e1', '#d084d0', '#faaac2', '#a4de6c']
 
-  // Transform data for radar chart
-  const getRadarData = (player) => {
-    if (player.totalShots === 0) return []
-    return [
-      { subject: 'Accuracy', A: parseFloat(player.accuracy), fullMark: 100 },
-      { subject: 'Total Points', A: Math.min(player.totalPoints, 100), fullMark: 100 },
-      { subject: 'Shots Made', A: Math.min(player.totalMade * 10, 100), fullMark: 100 },
-      { subject: 'Zone 1', A: parseFloat(player.zoneStats[1]?.accuracy || 0), fullMark: 100 },
-      { subject: 'Zone 2', A: parseFloat(player.zoneStats[2]?.accuracy || 0), fullMark: 100 },
-      { subject: 'Zone 3', A: parseFloat(player.zoneStats[3]?.accuracy || 0), fullMark: 100 }
-    ]
-  }
-
-  // Transform data for scatter plot
-  const getScatterData = () => {
-    return playerStats.map(p => ({
-      name: p.name,
-      x: p.totalShots,
-      y: parseFloat(p.accuracy),
-      z: p.totalPoints
-    }))
-  }
-
-  // Transform data for zone heatmap
-  const getZoneHeatmapData = () => {
-    const zones = [1, 2, 3, 4, 5, 6]
-    return zones.map(zone => {
-      const data = { zone: `Zone ${zone}` }
-      playerStats.forEach(player => {
-        data[player.name] = parseFloat(player.zoneStats[zone]?.accuracy || 0)
-      })
+  // Get stacked bar chart data showing points by zone for each player
+  const getZonePointsData = (stats) => {
+    return stats.map(player => {
+      const data = { name: player.name }
+      for (let z = 1; z <= 6; z++) {
+        const zoneMade = player.zoneStats[z]?.made || 0
+        const points = z === 1 ? zoneMade * 1 : z <= 3 ? zoneMade * 2 : zoneMade * 3
+        data[`Zone ${z}`] = points
+      }
       return data
     })
+  }
+
+  // Get point contributions data (for pie chart)
+  const getPointContributions = (stats) => {
+    return stats.map(player => ({
+      name: player.name,
+      value: player.totalPoints
+    })).filter(item => item.value > 0)
+  }
+
+  // Get zone contributions data (for pie chart)
+  const getZoneContributions = (stats) => {
+    const zonePoints = { 'Zone 1': 0, 'Zone 2': 0, 'Zone 3': 0, 'Zone 4': 0, 'Zone 5': 0, 'Zone 6': 0 }
+    stats.forEach(player => {
+      for (let z = 1; z <= 6; z++) {
+        const zoneMade = player.zoneStats[z]?.made || 0
+        const points = z === 1 ? zoneMade * 1 : z <= 3 ? zoneMade * 2 : zoneMade * 3
+        zonePoints[`Zone ${z}`] += points
+      }
+    })
+    return Object.entries(zonePoints)
+      .map(([name, value]) => ({ name, value }))
+      .filter(item => item.value > 0)
   }
 
   return (
     <div style={{ minHeight: '100vh', padding: '1rem', backgroundColor: 'transparent' }}>
       <h1>Data View</h1>
       {!supabase && <p style={{color: 'red'}}>Using local storage - data will not persist after refresh</p>}
+      
+      {/* Team Selection */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '2rem', marginBottom: '2rem' }}>
+        <div style={{ padding: '1.5rem', backgroundColor: 'rgba(79, 163, 255, 0.08)', borderRadius: '8px', border: '1px solid rgba(79, 163, 255, 0.2)' }}>
+          <h2 style={{marginTop: 0, color: '#ffffff'}}>Select Team</h2>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+            <button 
+              onClick={() => setSelectedTeam(null)}
+              style={{
+                padding: '0.7em 1.4em',
+                backgroundColor: selectedTeam === null ? '#0066cc' : 'rgba(0, 102, 204, 0.5)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                fontWeight: selectedTeam === null ? '600' : '500'
+              }}
+            >
+              All Teams
+            </button>
+            {teams.map(team => (
+              <button
+                key={team.id}
+                onClick={() => setSelectedTeam(team)}
+                style={{
+                  padding: '0.7em 1.4em',
+                  backgroundColor: selectedTeam?.id === team.id ? '#0066cc' : 'rgba(0, 102, 204, 0.5)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  fontWeight: selectedTeam?.id === team.id ? '600' : '500'
+                }}
+              >
+                {team.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
       {playerStats.length === 0 ? (
         <p>No players have been added yet. Add teams and players to see stats here.</p>
       ) : (
         <>
-          <h2>Player Stats Table</h2>
-          <table>
-        <thead>
-          <tr>
-            <th>Player</th>
-            <th>Team</th>
-            <th>Total Shots</th>
-            <th>Shots Made</th>
-            <th>Accuracy</th>
-            <th>Total Points</th>
-            {Array.from({length: 6}, (_, i) => <th key={i+1}>Zone {i+1} Made/Total (Acc%)</th>)}
-          </tr>
-        </thead>
-        <tbody>
-          {playerStats.map(player => (
-            <tr key={player.name}>
-              <td>{player.name}</td>
-              <td>{player.team}</td>
-              <td>{player.totalShots}</td>
-              <td>{player.totalMade}</td>
-              <td>{player.accuracy}%</td>
-              <td>{player.totalPoints}</td>
-              {Array.from({length: 6}, (_, i) => {
-                const z = i + 1
-                const stat = player.zoneStats[z]
-                return <td key={z}>{stat.made}/{stat.total} ({stat.accuracy}%)</td>
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+          {/* Filter data based on team selection */}
+          {(() => {
+            const filteredPlayerStats = selectedTeam 
+              ? playerStats.filter(p => p.team === selectedTeam.name)
+              : playerStats;
+            const finalTeamStats = selectedTeam
+              ? teamStats.filter(t => t.name === selectedTeam.name)
+              : teamStats;
 
-      <h2>Team Stats Table</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Team</th>
-            <th>Total Shots</th>
-            <th>Shots Made</th>
-            <th>Accuracy</th>
-            <th>Total Points</th>
-          </tr>
-        </thead>
-        <tbody>
-          {teamStats.map(team => (
-            <tr key={team.name}>
-              <td>{team.name}</td>
-              <td>{team.totalShots}</td>
-              <td>{team.totalMade}</td>
-              <td>{team.accuracy}%</td>
-              <td>{team.totalPoints}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      <div style={{ marginTop: '2rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
-        {/* 1. Team Comparison - Bar Chart */}
-        <div>
-          <h2>Team Points Comparison</h2>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={teamStats}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey="totalPoints" fill="#8884d8" name="Total Points" />
-              <Bar dataKey="accuracy" fill="#82ca9d" name="Accuracy %" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* 2. Pie Chart - Makes vs Misses */}
-        <div>
-          <h2>Overall Makes vs Misses</h2>
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie
-                data={[
-                  { name: 'Made', value: playerStats.reduce((sum, p) => sum + p.totalMade, 0) },
-                  { name: 'Missed', value: playerStats.reduce((sum, p) => sum + (p.totalShots - p.totalMade), 0) }
-                ]}
-                cx="50%"
-                cy="50%"
-                labelLine={true}
-                label={({ name, value }) => `${name}: ${value}`}
-                outerRadius={100}
-                fill="#8884d8"
-                dataKey="value"
-              >
-                <Cell fill="#82ca9d" />
-                <Cell fill="#ff7c7c" />
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* 3. Scatter Plot - Volume vs Accuracy */}
-      <div style={{ marginTop: '2rem' }}>
-        <h2>Shot Volume vs Accuracy</h2>
-        <ResponsiveContainer width="100%" height={400}>
-          <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="x" name="Total Shots" />
-            <YAxis dataKey="y" name="Accuracy %" />
-            <Tooltip cursor={{ strokeDasharray: '3 3' }} 
-              content={({ active, payload }) => {
-                if (active && payload && payload.length) {
-                  const data = payload[0].payload;
-                  return <div style={{backgroundColor: 'white', padding: '5px', border: '1px solid #ccc'}}>
-                    {data.name}<br/>Shots: {data.x}<br/>Accuracy: {data.y}%<br/>Points: {data.z}
-                  </div>;
-                }
-                return null;
-              }} 
-            />
-            <Scatter name="Players" data={getScatterData()} fill="#8884d8" />
-          </ScatterChart>
-        </ResponsiveContainer>
-      </div>
-
-      {/* 4. Zone Accuracy Heatmap (Stacked Bar) */}
-      <div style={{ marginTop: '2rem' }}>
-        <h2>Zone Accuracy by Player (Stacked)</h2>
-        <ResponsiveContainer width="100%" height={400}>
-          <BarChart data={getZoneHeatmapData()}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="zone" />
-            <YAxis label={{ value: 'Accuracy %', angle: -90, position: 'insideLeft' }} />
-            <Tooltip />
-            <Legend />
-            {playerStats.map((player, idx) => (
-              <Bar key={player.name} dataKey={player.name} stackId="a" fill={COLORS[idx % COLORS.length]} />
-            ))}
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-
-      {/* 5. Custom Court Visualization - Zone Heatmap */}
-      <div style={{ marginTop: '2rem' }}>
-        <h2>Shooting Zones Performance</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', maxWidth: '600px' }}>
-          {Array.from({length: 6}, (_, i) => {
-            const zone = i + 1
-            const avgAccuracy = playerStats.length > 0 
-              ? playerStats.reduce((sum, p) => sum + parseFloat(p.zoneStats[zone]?.accuracy || 0), 0) / playerStats.length
-              : 0
-            const getColor = (acc) => {
-              if (acc >= 75) return '#22c55e'
-              if (acc >= 50) return '#eab308'
-              if (acc >= 25) return '#f97316'
-              return '#ef4444'
-            }
             return (
-              <div
-                key={zone}
-                style={{
-                  backgroundColor: getColor(avgAccuracy),
-                  padding: '2rem',
-                  borderRadius: '8px',
-                  textAlign: 'center',
-                  color: 'white',
-                  fontWeight: 'bold',
-                  minHeight: '100px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'center'
-                }}
-              >
-                <div style={{fontSize: '24px', marginBottom: '0.5rem'}}>Zone {zone}</div>
-                <div style={{fontSize: '18px'}}>{avgAccuracy.toFixed(1)}% Accuracy</div>
-              </div>
-            )
-          })}
-        </div>
-      </div>
+              <>
+                <h2>Player Stats Table</h2>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Player</th>
+                      {!selectedTeam && <th>Team</th>}
+                      <th>Total Shots</th>
+                      <th>Shots Made</th>
+                      <th>Accuracy</th>
+                      <th>Total Points</th>
+                      {Array.from({length: 6}, (_, i) => <th key={i+1}>Zone {i+1} Made/Total (Acc%)</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredPlayerStats.map(player => (
+                      <tr key={player.name}>
+                        <td>{player.name}</td>
+                        {!selectedTeam && <td>{player.team}</td>}
+                        <td>{player.totalShots}</td>
+                        <td>{player.totalMade}</td>
+                        <td>{player.accuracy}%</td>
+                        <td>{player.totalPoints}</td>
+                        {Array.from({length: 6}, (_, i) => {
+                          const z = i + 1
+                          const stat = player.zoneStats[z]
+                          return <td key={z}>{stat.made}/{stat.total} ({stat.accuracy}%)</td>
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
 
-      {/* 6. Individual Player Radar Charts */}
-      <div style={{ marginTop: '2rem' }}>
-        <h2>Individual Player Performance Radar</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '2rem' }}>
-          {playerStats.map((player, idx) => (
-            player.totalShots > 0 && (
-              <div key={player.name}>
-                <h3>{player.name}</h3>
-                <ResponsiveContainer width="100%" height={300}>
-                  <RadarChart data={getRadarData(player)}>
-                    <PolarGrid />
-                    <PolarAngleAxis dataKey="subject" />
-                    <PolarRadiusAxis angle={90} domain={[0, 100]} />
-                    <Radar name={player.name} dataKey="A" stroke={COLORS[idx % COLORS.length]} fill={COLORS[idx % COLORS.length]} fillOpacity={0.6} />
-                    <Tooltip />
-                  </RadarChart>
-                </ResponsiveContainer>
-              </div>
-            )
-          ))}
-        </div>
-      </div>
+                <h2>{selectedTeam ? selectedTeam.name : 'Team'} Stats Table</h2>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Team</th>
+                      <th>Total Shots</th>
+                      <th>Shots Made</th>
+                      <th>Accuracy</th>
+                      <th>Total Points</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {finalTeamStats.map(team => (
+                      <tr key={team.name}>
+                        <td>{team.name}</td>
+                        <td>{team.totalShots}</td>
+                        <td>{team.totalMade}</td>
+                        <td>{team.accuracy}%</td>
+                        <td>{team.totalPoints}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            );
+          })()}
+        </>
+      )}
 
-      {/* 7. Player Comparison - Multi-metric Bar Chart */}
-      <div style={{ marginTop: '2rem' }}>
-        <h2>Player Comparison - All Metrics</h2>
-        <ResponsiveContainer width="100%" height={400}>
-          <BarChart data={playerStats}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="name" />
-            <YAxis />
-            <Tooltip />
-            <Legend />
-            <Bar dataKey="totalPoints" fill="#8884d8" name="Total Points" />
-            <Bar dataKey="accuracy" fill="#82ca9d" name="Accuracy %" />
-            <Bar dataKey="totalShots" fill="#ffc658" name="Total Shots" />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
+      {/* Visualizations */}
+      {playerStats.length > 0 && (
+        <>
+          {(() => {
+            const filteredPlayerStats = selectedTeam 
+              ? playerStats.filter(p => p.team === selectedTeam.name)
+              : playerStats;
 
-      {/* 8. Team Comparison Panels */}
-      <div style={{ marginTop: '2rem' }}>
-        <h2>Team Comparison Panels</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.5rem' }}>
-          {teamStats.map((team, idx) => (
-            <div key={team.name} style={{
-              border: '2px solid #ccc',
-              borderRadius: '8px',
-              padding: '1.5rem',
-              backgroundColor: '#f9f9f9'
-            }}>
-              <h3 style={{margin: '0 0 1rem 0', color: COLORS[idx % COLORS.length]}}>{team.name}</h3>
-              <div style={{fontSize: '14px', lineHeight: '1.8'}}>
-                <div><strong>Total Shots:</strong> {team.totalShots}</div>
-                <div><strong>Shots Made:</strong> {team.totalMade}</div>
-                <div><strong>Accuracy:</strong> {team.accuracy}%</div>
-                <div><strong>Total Points:</strong> {team.totalPoints}</div>
-                <div style={{marginTop: '1rem', fontSize: '12px', color: '#666'}}>
-                  <strong>Team Players:</strong> {playerStats.filter(p => p.team === team.name).length}
+            const zonePointsData = getZonePointsData(filteredPlayerStats)
+            const pointContributions = getPointContributions(filteredPlayerStats)
+            const zoneContributions = getZoneContributions(filteredPlayerStats)
+
+            return (
+              <>
+                {/* 1. Stacked Bar Chart - Zone Points */}
+                <div style={{ marginTop: '3rem', padding: '2rem', backgroundColor: 'rgba(79, 163, 255, 0.08)', borderRadius: '12px', border: '1px solid rgba(79, 163, 255, 0.2)' }}>
+                  <h2 style={{ marginTop: 0, color: '#4fa3ff' }}>Points by Zone</h2>
+                  <ResponsiveContainer width="100%" height={400}>
+                    <BarChart data={zonePointsData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.1)" />
+                      <XAxis dataKey="name" stroke="#ffffff" />
+                      <YAxis stroke="#ffffff" />
+                      <Tooltip contentStyle={{backgroundColor: '#1a2f4f', border: '1px solid #4fa3ff'}} />
+                      <Legend />
+                      <Bar dataKey="Zone 1" stackId="a" fill="#ff7c7c" />
+                      <Bar dataKey="Zone 2" stackId="a" fill="#ffc658" />
+                      <Bar dataKey="Zone 3" stackId="a" fill="#82ca9d" />
+                      <Bar dataKey="Zone 4" stackId="a" fill="#8884d8" />
+                      <Bar dataKey="Zone 5" stackId="a" fill="#d084d0" />
+                      <Bar dataKey="Zone 6" stackId="a" fill="#8dd1e1" />
+                    </BarChart>
+                  </ResponsiveContainer>
                 </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
 
-      {/* 9. Line Chart - Zone Progression */}
-      <div style={{ marginTop: '2rem' }}>
-        <h2>Zone Performance Trend</h2>
-        <ResponsiveContainer width="100%" height={400}>
-          <LineChart data={getZoneHeatmapData()}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="zone" />
-            <YAxis label={{ value: 'Accuracy %', angle: -90, position: 'insideLeft' }} />
-            <Tooltip />
-            <Legend />
-            {playerStats.map((player, idx) => (
-              <Line 
-                key={player.name} 
-                type="monotone" 
-                dataKey={player.name} 
-                stroke={COLORS[idx % COLORS.length]}
-                connectNulls
-              />
-            ))}
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-    </>
-  )}
+                {/* 2. Pie Chart - Point Contributions */}
+                <div style={{ marginTop: '2rem', padding: '2rem', backgroundColor: 'rgba(79, 163, 255, 0.08)', borderRadius: '12px', border: '1px solid rgba(79, 163, 255, 0.2)' }}>
+                  <h2 style={{ marginTop: 0, color: '#4fa3ff' }}>Point Contributions</h2>
+                  <ResponsiveContainer width="100%" height={400}>
+                    <PieChart>
+                      <Pie
+                        data={pointContributions}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={true}
+                        label={({ name, value }) => `${name}: ${value}`}
+                        outerRadius={120}
+                        fill="#8884d8"
+                        dataKey="value"
+                      >
+                        {pointContributions.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip contentStyle={{backgroundColor: '#1a2f4f', border: '1px solid #4fa3ff'}} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* 3. Pie Chart - Zone Contributions */}
+                <div style={{ marginTop: '2rem', padding: '2rem', backgroundColor: 'rgba(79, 163, 255, 0.08)', borderRadius: '12px', border: '1px solid rgba(79, 163, 255, 0.2)' }}>
+                  <h2 style={{ marginTop: 0, color: '#4fa3ff' }}>Zone Contributions</h2>
+                  <ResponsiveContainer width="100%" height={400}>
+                    <PieChart>
+                      <Pie
+                        data={zoneContributions}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={true}
+                        label={({ name, value }) => `${name}: ${value}`}
+                        outerRadius={120}
+                        fill="#8884d8"
+                        dataKey="value"
+                      >
+                        <Cell fill="#ff7c7c" />
+                        <Cell fill="#ffc658" />
+                        <Cell fill="#82ca9d" />
+                        <Cell fill="#8884d8" />
+                        <Cell fill="#d084d0" />
+                        <Cell fill="#8dd1e1" />
+                      </Pie>
+                      <Tooltip contentStyle={{backgroundColor: '#1a2f4f', border: '1px solid #4fa3ff'}} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              </>
+            );
+          })()}
+        </>
+      )}
     </div>
   )
 }

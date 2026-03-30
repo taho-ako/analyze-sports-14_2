@@ -149,6 +149,28 @@ function TeamCreation() {
     setSelectedTeam(updatedTeams.find(t => t.id === selectedTeam?.id) || null)
   }
 
+  const removeTeam = async (teamId) => {
+    if (supabase) {
+      // First delete all players in this team
+      const team = teams.find(t => t.id === teamId)
+      if (team && team.players) {
+        for (const player of team.players) {
+          await supabase.from('players').delete().eq('id', player.id)
+        }
+      }
+      // Then delete the team
+      const { error } = await supabase.from('teams').delete().eq('id', teamId)
+      if (error) return console.error(error)
+      fetchTeams()
+      return
+    }
+
+    const updatedTeams = teams.filter(t => t.id !== teamId)
+    localStorage.setItem('teams', JSON.stringify(updatedTeams))
+    setTeams(updatedTeams)
+    if (selectedTeam?.id === teamId) setSelectedTeam(null)
+  }
+
   return (
     <div>
       <h1>Team Creation</h1>
@@ -197,48 +219,119 @@ function TeamCreation() {
             transform: translateX(-50%) translateY(0);
           }
         }
+        
+        input, select {
+          padding: 0.7rem 1rem;
+          font-size: 1rem;
+          border: 1px solid rgba(79, 163, 255, 0.3);
+          border-radius: 8px;
+          background-color: rgba(255, 255, 255, 0.05);
+          color: #ffffff;
+          transition: all 0.2s ease;
+          font-family: inherit;
+          width: 100%;
+          box-sizing: border-box;
+        }
+        
+        input::placeholder {
+          color: rgba(255, 255, 255, 0.5);
+        }
+        
+        input:focus, select:focus {
+          outline: none;
+          border-color: #4fa3ff;
+          background-color: rgba(79, 163, 255, 0.1);
+          box-shadow: 0 0 0 3px rgba(79, 163, 255, 0.1);
+        }
+        
+        select {
+          cursor: pointer;
+        }
+        
+        select option {
+          background-color: #1a2f4f;
+          color: #ffffff;
+        }
       `}</style>
-      <div>
-        <input value={newTeamName} onChange={(e) => setNewTeamName(e.target.value)} placeholder="Team Name" />
-        <button onClick={createTeam}>Create Team</button>
-      </div>
-      <div>
-        <select onChange={(e) => setSelectedTeam(teams.find(t => t.id == e.target.value))}>
-          <option>Select Team</option>
-          {teams.map(team => <option key={team.id} value={team.id}>{team.name}</option>)}
-        </select>
-        <input value={newPlayerName} onChange={(e) => setNewPlayerName(e.target.value)} placeholder="Player Name" />
-        <button onClick={addPlayer}>Add Player</button>
-      </div>
-      <div>
-        {teams.map(team => (
-          <div key={team.id}>
-            <h2>{team.name}</h2>
-            <ul>
-              {team.players.map(player => (
-                <li key={player.id}>
-                  {player.name}
-                  <button onClick={() => removePlayer(player.id, team.id)} style={{ marginLeft: 8 }}>Remove</button>
-                  <select
-                    onChange={(e) => {
-                      if (!e.target.value) return
-                      movePlayer(player.id, team.id, Number(e.target.value))
-                    }}
-                    value=""
-                    style={{ marginLeft: 8 }}
-                  >
-                    <option value="">Move to...</option>
-                    {teams
-                      .filter(dest => dest.id !== team.id)
-                      .map(dest => (
-                        <option key={dest.id} value={dest.id}>{dest.name}</option>
-                      ))}
-                  </select>
-                </li>
-              ))}
-            </ul>
+      
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', marginBottom: '3rem' }}>
+        {teams.length < 4 && (
+          <div style={{ padding: '1.5rem', backgroundColor: 'rgba(79, 163, 255, 0.08)', borderRadius: '8px', border: '1px solid rgba(79, 163, 255, 0.2)' }}>
+            <h2 style={{marginTop: 0, color: '#ffffff'}}>Create Team</h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+              <input value={newTeamName} onChange={(e) => setNewTeamName(e.target.value)} placeholder="Team Name" />
+              <button onClick={createTeam} style={{padding: '0.7em 1.4em', fontSize: '0.95em'}}>Create Team</button>
+            </div>
           </div>
-        ))}
+        )}
+        
+        <div style={{ padding: '1.5rem', backgroundColor: 'rgba(79, 163, 255, 0.08)', borderRadius: '8px', border: '1px solid rgba(79, 163, 255, 0.2)' }}>
+          <h2 style={{marginTop: 0, color: '#ffffff'}}>Add Player</h2>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+            <select onChange={(e) => setSelectedTeam(teams.find(t => t.id == e.target.value))}>
+              <option>Select Team</option>
+              {teams.map(team => <option key={team.id} value={team.id}>{team.name}</option>)}
+            </select>
+            <input value={newPlayerName} onChange={(e) => setNewPlayerName(e.target.value)} placeholder="Player Name" />
+            <button onClick={addPlayer} style={{padding: '0.7em 1.4em', fontSize: '0.95em'}}>Add Player</button>
+          </div>
+        </div>
+      </div>
+      
+      <div style={{ padding: '2rem', backgroundColor: 'rgba(255, 255, 255, 0.03)', borderRadius: '12px', border: '1px solid rgba(79, 163, 255, 0.15)' }}>
+        <h2 style={{marginTop: 0, color: '#4fa3ff', marginBottom: '1.5rem'}}>Teams & Players</h2>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.5rem' }}>
+          {teams.length === 0 ? (
+            <p style={{ color: 'rgba(255, 255, 255, 0.6)', gridColumn: '1 / -1', textAlign: 'center', padding: '2rem' }}>No teams yet. Create one to get started!</p>
+          ) : (
+            teams.map(team => (
+              <div key={team.id} style={{ padding: '1.5rem', backgroundColor: 'rgba(79, 163, 255, 0.12)', borderRadius: '8px', border: '1px solid rgba(79, 163, 255, 0.25)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                  <h3 style={{marginTop: 0, marginBottom: 0, color: '#ffffff', fontSize: '1.3em'}}>{team.name}</h3>
+                  <button 
+                    onClick={() => removeTeam(team.id)} 
+                    style={{ padding: '0.3em 0.6em', fontSize: '0.9em', backgroundColor: '#ff4444', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }} 
+                    title="Delete team"
+                  >
+                    Delete
+                  </button>
+                </div>
+                {team.players.length === 0 ? (
+                  <p style={{ color: 'rgba(255, 255, 255, 0.5)', margin: 0 }}>No players yet</p>
+                ) : (
+                  <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                    {team.players.map(player => (
+                      <li key={player.id} style={{ padding: '0.8rem', marginBottom: '0.5rem', backgroundColor: 'rgba(255, 255, 255, 0.08)', borderRadius: '6px', border: '1px solid rgba(79, 163, 255, 0.2)', color: '#ffffff' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
+                          <span>{player.name}</span>
+                          <div style={{ display: 'flex', gap: '0.3rem' }}>
+                            <button onClick={() => removePlayer(player.id, team.id)} style={{ padding: '0.3em 0.6em', fontSize: '0.8em' }} title="Remove player">×</button>
+                            <select
+                              onChange={(e) => {
+                                if (!e.target.value) return
+                                movePlayer(player.id, team.id, Number(e.target.value))
+                              }}
+                              value=""
+                              style={{ fontSize: '0.8em', padding: '0.3em 0.6em' }}
+                              title="Move to another team"
+                            >
+                              <option value="">→</option>
+                              {teams
+                                .filter(dest => dest.id !== team.id)
+                                .map(dest => (
+                                  <option key={dest.id} value={dest.id}>{dest.name}</option>
+                                ))}
+                            </select>
+                          </div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ))
+          )}
+        </div>
       </div>
     </div>
   )

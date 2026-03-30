@@ -6,7 +6,7 @@ import './App.css'
 
 function App() {
   return (
-    <Router>F
+    <Router>
       <div className="app">
         <header className="app-header">
           <img
@@ -16,7 +16,7 @@ function App() {
             width="64"
             height="64"
           />
-          <h1>Analyze Sports</h1>
+          <h1>Hooplytics</h1>
         </header>
         <nav>
           <Link to="/">Team Creation</Link>
