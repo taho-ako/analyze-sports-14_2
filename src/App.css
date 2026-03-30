@@ -22,6 +22,46 @@ nav a:hover {
   text-decoration: underline;
 }
 
+.enter-code-page {
+  text-align: center;
+  max-width: 520px;
+  margin: 0 auto;
+}
+
+.enter-code-subtitle {
+  margin-top: 0.25rem;
+  color: #888;
+}
+
+.enter-code-form {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.enter-code-input {
+  flex: 1;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  border: 1px solid #444;
+  background: #1a1a1a;
+  color: inherit;
+  font-size: 1rem;
+}
+
+.enter-code-input:focus-visible {
+  outline: 4px auto -webkit-focus-ring-color;
+}
+
+.enter-code-button {
+  padding: 0.75rem 1rem;
+}
+
+.enter-code-error {
+  margin-top: 0.75rem;
+  color: #ff6b6b;
+}
+
 .heatmap {
   display: flex;
   gap: 1rem;
