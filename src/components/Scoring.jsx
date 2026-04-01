@@ -3,7 +3,6 @@ import { supabase } from '../supabaseClient'
 
 function Scoring() {
   const [teams, setTeams] = useState([])
-  const [players, setPlayers] = useState([])
   const [selectedTeam, setSelectedTeam] = useState(null)
   const [selectedPlayer, setSelectedPlayer] = useState(null)
   const [zoneStats, setZoneStats] = useState({})
@@ -35,7 +34,7 @@ function Scoring() {
   }
 
   const handlePlayerSelect = (playerId) => {
-    const player = selectedTeam?.players.find(p => p.id == playerId)
+    const player = (selectedTeam?.players ?? []).find(p => p.id == playerId)
     setSelectedPlayer(player)
     fetchZoneStats(player)
     setShots([])
@@ -328,7 +327,7 @@ function Scoring() {
         <div style={{ marginBottom: '2rem', padding: '1.5rem', backgroundColor: 'rgba(79, 163, 255, 0.08)', borderRadius: '8px', border: '1px solid rgba(79, 163, 255, 0.2)' }}>
           <h2 style={{marginTop: 0, color: '#ffffff'}}>Step 2: Select Player</h2>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem' }}>
-            {selectedTeam.players.map(player => (
+            {(selectedTeam.players ?? []).map(player => (
               <button
                 key={player.id}
                 onClick={() => handlePlayerSelect(player.id)}

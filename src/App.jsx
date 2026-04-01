@@ -12,8 +12,8 @@ function App() {
         <header className="app-header">
           <img
             className="uva-logo"
-            src="uva logo.png"
-            alt="UVA logo"
+            src="/vite.svg"
+            alt=""
             width="64"
             height="64"
           />

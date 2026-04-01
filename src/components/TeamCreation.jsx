@@ -25,16 +25,7 @@ function TeamCreation() {
   }
 
   useEffect(() => {
-    fetchTeams() // eslint-disable-line react-hooks/exhaustive-deps
-
-    const handleUnload = () => {
-      if (!supabase) {
-        localStorage.removeItem('teams')
-      }
-    }
-
-    window.addEventListener('beforeunload', handleUnload)
-    return () => window.removeEventListener('beforeunload', handleUnload)
+    fetchTeams()
   }, [fetchTeams])
 
   const createTeam = async () => {
@@ -46,8 +37,10 @@ function TeamCreation() {
 
     if (supabase) {
       const { error } = await supabase.from('teams').insert([{ name: trimmedName }])
-      if (error) console.error(error)
-      else {
+      if (error) {
+        console.error(error)
+        showNotification(error.message || 'Could not create team')
+      } else {
         setNewTeamName('')
         fetchTeams()
       }
@@ -69,24 +62,28 @@ function TeamCreation() {
     const trimmedPlayerName = newPlayerName.trim()
     if (!trimmedPlayerName) return showNotification('Player name cannot be empty')
 
-    if (team.players.length >= 4) return showNotification('Maximum 4 players per team')
+    const roster = team.players ?? []
+    if (roster.length >= 4) return showNotification('Maximum 4 players per team')
 
     const playerExists = teams.some(teamItem =>
-      teamItem.players.some(player => player.name.trim().toLowerCase() === trimmedPlayerName.toLowerCase())
+      (teamItem.players ?? []).some(player => player.name.trim().toLowerCase() === trimmedPlayerName.toLowerCase())
     )
     if (playerExists) return showNotification('A player with that name already exists')
 
     if (supabase) {
       const { error } = await supabase.from('players').insert([{ name: trimmedPlayerName, team_id: selectedTeam.id }])
-      if (error) console.error(error)
-      else {
+      if (error) {
+        console.error(error)
+        showNotification(error.message || 'Could not add player')
+      } else {
         setNewPlayerName('')
         fetchTeams()
       }
     } else {
       const updatedTeams = teams.map(teamItem => {
         if (teamItem.id === selectedTeam.id) {
-          return { ...teamItem, players: [...teamItem.players, { id: Date.now(), name: trimmedPlayerName }] }
+          const existing = teamItem.players ?? []
+          return { ...teamItem, players: [...existing, { id: Date.now(), name: trimmedPlayerName }] }
         }
         return teamItem
       })
@@ -100,14 +97,18 @@ function TeamCreation() {
   const removePlayer = async (playerId, teamId) => {
     if (supabase) {
       const { error } = await supabase.from('players').delete().eq('id', playerId)
-      if (error) return console.error(error)
+      if (error) {
+        console.error(error)
+        showNotification(error.message || 'Could not remove player')
+        return
+      }
       fetchTeams()
       return
     }
 
     const updatedTeams = teams.map(teamItem => {
       if (teamItem.id === teamId) {
-        return { ...teamItem, players: teamItem.players.filter(player => player.id !== playerId) }
+        return { ...teamItem, players: (teamItem.players ?? []).filter(player => player.id !== playerId) }
       }
       return teamItem
     })
@@ -122,11 +123,15 @@ function TeamCreation() {
     const toTeam = teams.find(t => t.id === toTeamId || t.id === Number(toTeamId))
     if (!fromTeam || !toTeam) return showNotification('Team not found')
 
-    if (toTeam.players.length >= 4) return showNotification('Destination team already has 4 players')
+    if ((toTeam.players ?? []).length >= 4) return showNotification('Destination team already has 4 players')
 
     if (supabase) {
       const { error } = await supabase.from('players').update({ team_id: toTeamId }).eq('id', playerId)
-      if (error) return console.error(error)
+      if (error) {
+        console.error(error)
+        showNotification(error.message || 'Could not move player')
+        return
+      }
       fetchTeams()
       return
     }
@@ -136,10 +141,10 @@ function TeamCreation() {
 
     const updatedTeams = teams.map(teamItem => {
       if (teamItem.id === fromTeamId) {
-        return { ...teamItem, players: teamItem.players.filter(player => player.id !== playerId) }
+        return { ...teamItem, players: (teamItem.players ?? []).filter(player => player.id !== playerId) }
       }
       if (teamItem.id === toTeamId) {
-        return { ...teamItem, players: [...teamItem.players, playerItem] }
+        return { ...teamItem, players: [...(teamItem.players ?? []), playerItem] }
       }
       return teamItem
     })
@@ -160,7 +165,11 @@ function TeamCreation() {
       }
       // Then delete the team
       const { error } = await supabase.from('teams').delete().eq('id', teamId)
-      if (error) return console.error(error)
+      if (error) {
+        console.error(error)
+        showNotification(error.message || 'Could not delete team')
+        return
+      }
       fetchTeams()
       return
     }
@@ -296,11 +305,11 @@ function TeamCreation() {
                     Delete
                   </button>
                 </div>
-                {team.players.length === 0 ? (
+                {(team.players ?? []).length === 0 ? (
                   <p style={{ color: 'rgba(255, 255, 255, 0.5)', margin: 0 }}>No players yet</p>
                 ) : (
                   <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                    {team.players.map(player => (
+                    {(team.players ?? []).map(player => (
                       <li key={player.id} style={{ padding: '0.8rem', marginBottom: '0.5rem', backgroundColor: 'rgba(255, 255, 255, 0.08)', borderRadius: '6px', border: '1px solid rgba(79, 163, 255, 0.2)', color: '#ffffff' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
                           <span>{player.name}</span>

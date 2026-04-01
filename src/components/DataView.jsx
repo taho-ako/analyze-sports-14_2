@@ -29,7 +29,7 @@ function DataView() {
       teamsData = JSON.parse(localStorage.getItem('teams') || '[]')
       const shots = JSON.parse(localStorage.getItem('shots') || '[]')
       playersData = teamsData.flatMap(team => 
-        team.players.map(player => ({
+        (team.players ?? []).map(player => ({
           ...player,
           teams: { name: team.name },
           shots: shots.filter(shot => shot.player_id === player.id)
@@ -96,24 +96,6 @@ function DataView() {
       }
     })
     setTeamStats(tStats)
-
-    // Zone distribution - percentage of all shots per zone, plus made/total
-    const allShots = playersData.flatMap(p => p.shots)
-    const totalAllShots = allShots.length
-    const zDist = []
-    for (let z = 1; z <= 6; z++) {
-      const zoneShotsArr = allShots.filter(s => s.zone === z)
-      const zoneShots = zoneShotsArr.length
-      const made = zoneShotsArr.filter(s => s.made).length
-      const accuracy = zoneShots > 0 ? (made / zoneShots * 100) : 0
-      zDist.push({
-        zone: `Zone ${z}`,
-        accuracy: parseFloat(accuracy.toFixed(1)),
-        made,
-        total: zoneShots
-      })
-    }
-    setZoneDistribution(zDist)
   }
 
   const COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff7c7c', '#8dd1e1', '#d084d0', '#faaac2', '#a4de6c']
