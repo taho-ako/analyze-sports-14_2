@@ -4,6 +4,8 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell
 } from 'recharts'
+import { ZONE_COLORS } from '../models/heatmapModel'
+import HeatmapCourt from './HeatmapCourt'
 
 function DataView() {
   const [playerStats, setPlayerStats] = useState([])
@@ -97,23 +99,6 @@ function DataView() {
     })
     setTeamStats(tStats)
 
-    // Zone distribution - percentage of all shots per zone, plus made/total
-    const allShots = playersData.flatMap(p => p.shots)
-    const totalAllShots = allShots.length
-    const zDist = []
-    for (let z = 1; z <= 6; z++) {
-      const zoneShotsArr = allShots.filter(s => s.zone === z)
-      const zoneShots = zoneShotsArr.length
-      const made = zoneShotsArr.filter(s => s.made).length
-      const accuracy = zoneShots > 0 ? (made / zoneShots * 100) : 0
-      zDist.push({
-        zone: `Zone ${z}`,
-        accuracy: parseFloat(accuracy.toFixed(1)),
-        made,
-        total: zoneShots
-      })
-    }
-    setZoneDistribution(zDist)
   }
 
   const COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff7c7c', '#8dd1e1', '#d084d0', '#faaac2', '#a4de6c']
@@ -152,6 +137,23 @@ function DataView() {
     return Object.entries(zonePoints)
       .map(([name, value]) => ({ name, value }))
       .filter(item => item.value > 0)
+  }
+
+  const getCombinedZoneStats = (stats) => {
+    const combined = {}
+
+    for (let z = 1; z <= 6; z++) {
+      combined[z] = { made: 0, total: 0 }
+    }
+
+    stats.forEach(player => {
+      for (let z = 1; z <= 6; z++) {
+        combined[z].made += player.zoneStats[z]?.made || 0
+        combined[z].total += player.zoneStats[z]?.total || 0
+      }
+    })
+
+    return combined
   }
 
   return (
@@ -288,9 +290,15 @@ function DataView() {
             const zonePointsData = getZonePointsData(filteredPlayerStats)
             const pointContributions = getPointContributions(filteredPlayerStats)
             const zoneContributions = getZoneContributions(filteredPlayerStats)
+            const zoneHeatmapStats = getCombinedZoneStats(filteredPlayerStats)
 
             return (
               <>
+                <HeatmapCourt
+                  zoneStats={zoneHeatmapStats}
+                  title={`${selectedTeam ? selectedTeam.name : 'All Teams'} Accuracy Heatmap`}
+                />
+
                 {/* 1. Stacked Bar Chart - Zone Points */}
                 <div style={{ marginTop: '3rem', padding: '2rem', backgroundColor: 'rgba(79, 163, 255, 0.08)', borderRadius: '12px', border: '1px solid rgba(79, 163, 255, 0.2)' }}>
                   <h2 style={{ marginTop: 0, color: '#4fa3ff' }}>Points by Zone</h2>
@@ -301,12 +309,12 @@ function DataView() {
                       <YAxis stroke="#ffffff" />
                       <Tooltip contentStyle={{backgroundColor: '#1a2f4f', border: '1px solid #4fa3ff'}} />
                       <Legend />
-                      <Bar dataKey="Zone 1" stackId="a" fill="#ff7c7c" />
-                      <Bar dataKey="Zone 2" stackId="a" fill="#ffc658" />
-                      <Bar dataKey="Zone 3" stackId="a" fill="#82ca9d" />
-                      <Bar dataKey="Zone 4" stackId="a" fill="#8884d8" />
-                      <Bar dataKey="Zone 5" stackId="a" fill="#d084d0" />
-                      <Bar dataKey="Zone 6" stackId="a" fill="#8dd1e1" />
+                      <Bar dataKey="Zone 1" stackId="a" fill={ZONE_COLORS[1]} />
+                      <Bar dataKey="Zone 2" stackId="a" fill={ZONE_COLORS[2]} />
+                      <Bar dataKey="Zone 3" stackId="a" fill={ZONE_COLORS[3]} />
+                      <Bar dataKey="Zone 4" stackId="a" fill={ZONE_COLORS[4]} />
+                      <Bar dataKey="Zone 5" stackId="a" fill={ZONE_COLORS[5]} />
+                      <Bar dataKey="Zone 6" stackId="a" fill={ZONE_COLORS[6]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -350,17 +358,18 @@ function DataView() {
                         fill="#8884d8"
                         dataKey="value"
                       >
-                        <Cell fill="#ff7c7c" />
-                        <Cell fill="#ffc658" />
-                        <Cell fill="#82ca9d" />
-                        <Cell fill="#8884d8" />
-                        <Cell fill="#d084d0" />
-                        <Cell fill="#8dd1e1" />
+                        <Cell fill={ZONE_COLORS[1]} />
+                        <Cell fill={ZONE_COLORS[2]} />
+                        <Cell fill={ZONE_COLORS[3]} />
+                        <Cell fill={ZONE_COLORS[4]} />
+                        <Cell fill={ZONE_COLORS[5]} />
+                        <Cell fill={ZONE_COLORS[6]} />
                       </Pie>
                       <Tooltip contentStyle={{backgroundColor: '#1a2f4f', border: '1px solid #4fa3ff'}} />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
+
               </>
             );
           })()}

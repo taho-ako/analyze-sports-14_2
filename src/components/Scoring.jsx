@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../supabaseClient'
+import { getZoneColor } from '../models/heatmapModel'
+import HeatmapCourt from './HeatmapCourt'
 
 function Scoring() {
   const [teams, setTeams] = useState([])
@@ -165,34 +167,6 @@ function Scoring() {
     }
   }
 
-  const getZoneColor = (zone) => {
-    const stat = zoneStats[zone]
-    if (!stat || stat.total === 0) {
-      // Gray if no shots
-      return '#d1d5db'
-    }
-    const accuracy = stat.made / stat.total
-    
-    // Interpolate color: Red (0%) -> Yellow (50%) -> Green (100%)
-    let r, g, b
-    
-    if (accuracy < 0.5) {
-      // Red to Yellow: interpolate between red (#ef4444) and yellow (#fbbf24)
-      const ratio = accuracy / 0.5 // 0 to 1
-      r = Math.round(239 - (239 - 251) * ratio) // 239 -> 251
-      g = Math.round(68 + (191 - 68) * ratio)   // 68 -> 191
-      b = Math.round(68 + (36 - 68) * ratio)    // 68 -> 36
-    } else {
-      // Yellow to Green: interpolate between yellow (#fbbf24) and green (#22c55e)
-      const ratio = (accuracy - 0.5) / 0.5 // 0 to 1
-      r = Math.round(251 - (251 - 34) * ratio)  // 251 -> 34
-      g = Math.round(191 + (197 - 191) * ratio) // 191 -> 197
-      b = Math.round(36 - 36 * ratio)           // 36 -> 0
-    }
-    
-    return `rgb(${r}, ${g}, ${b})`
-  }
-
   const zones = [1, 2, 3, 4, 5, 6]
 
   const animationStyles = `
@@ -351,6 +325,11 @@ function Scoring() {
           </div>
         </div>
       )}
+
+      <HeatmapCourt
+        zoneStats={zoneStats}
+        title={selectedPlayer ? `${selectedPlayer.name} Accuracy Heatmap` : 'Accuracy Heatmap'}
+      />
 
       {/* Step 3: Record Shots */}
       {selectedPlayer && (
