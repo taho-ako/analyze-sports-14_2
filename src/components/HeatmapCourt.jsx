@@ -42,7 +42,7 @@ const DEBUG_ZONE_COLORS = {
   3: [255, 107, 107],
   4: [105, 219, 124],
   5: [255, 169, 77],
-  6: [31, 163, 221]
+  6: [139, 92, 246]
 }
 
 const MIN_COLOR_BRIGHTNESS = 75
@@ -320,7 +320,7 @@ function HeatmapCourt({ zoneStats, title = 'Shot Heatmap' }) {
   }, [showDebugOverlay, zoneMap])
 
   return (
-    <div style={{ marginTop: '2rem', padding: '1.5rem', backgroundColor: 'rgba(79, 163, 255, 0.08)', borderRadius: '12px', border: '1px solid rgba(79, 163, 255, 0.2)' }}>
+    <div style={{ marginTop: '1rem', padding: '1rem', backgroundColor: 'rgba(79, 163, 255, 0.08)', borderRadius: '10px', border: '1px solid rgba(79, 163, 255, 0.2)' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
         <h2 style={{ marginTop: 0, marginBottom: 0, color: '#4fa3ff' }}>{title}</h2>
         <button
@@ -329,15 +329,15 @@ function HeatmapCourt({ zoneStats, title = 'Shot Heatmap' }) {
             backgroundColor: showDebugOverlay ? '#16a34a' : '#1e3a5f',
             border: '1px solid rgba(79, 163, 255, 0.45)',
             borderRadius: '8px',
-            padding: '0.45rem 0.75rem',
-            fontSize: '0.85rem'
+            padding: '0.32rem 0.55rem',
+            fontSize: '0.75rem'
           }}
         >
           {showDebugOverlay ? 'Hide Zone-ID Debug' : 'Show Zone-ID Debug'}
         </button>
       </div>
 
-      <div style={{ maxWidth: '560px', width: '100%' }}>
+      <div style={{ maxWidth: '500px', width: '100%' }}>
         <div style={{ position: 'relative', width: '100%', aspectRatio: '465 / 436' }}>
           <img
             src="/new background heatmap.jpg"
@@ -368,17 +368,17 @@ function HeatmapCourt({ zoneStats, title = 'Shot Heatmap' }) {
         </div>
       </div>
 
-      <div style={{ marginTop: '1rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.6rem' }}>
+      <div style={{ marginTop: '0.75rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.45rem' }}>
         {heatmap.zones.map(zone => (
-          <div key={zone.id} style={{ borderRadius: '8px', border: '1px solid rgba(79, 163, 255, 0.35)', padding: '0.6rem 0.75rem', backgroundColor: 'rgba(12, 30, 56, 0.45)' }}>
+          <div key={zone.id} style={{ borderRadius: '8px', border: '1px solid rgba(79, 163, 255, 0.35)', padding: '0.45rem 0.55rem', backgroundColor: 'rgba(12, 30, 56, 0.45)' }}>
             <div style={{ fontWeight: 700 }}>{zone.label}</div>
-            <div style={{ fontSize: '0.9rem' }}>Made/Total: {zone.made}/{zone.total}</div>
-            <div style={{ fontSize: '0.9rem' }}>Accuracy: {zone.accuracy}%</div>
+            <div style={{ fontSize: '0.82rem' }}>Made/Total: {zone.made}/{zone.total}</div>
+            <div style={{ fontSize: '0.82rem' }}>Accuracy: {zone.accuracy}%</div>
           </div>
         ))}
       </div>
 
-      <p style={{ marginBottom: 0, marginTop: '0.9rem', fontSize: '0.9rem', color: 'rgba(255,255,255,0.85)' }}>
+      <p style={{ marginBottom: 0, marginTop: '0.7rem', fontSize: '0.82rem', color: 'rgba(255,255,255,0.85)' }}>
         Heat scale: red = low accuracy, yellow = middle accuracy, green = high accuracy.
       </p>
     </div>

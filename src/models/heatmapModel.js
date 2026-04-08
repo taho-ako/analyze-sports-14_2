@@ -4,7 +4,7 @@ export const ZONE_COLORS = {
   3: '#ff6b6b',
   4: '#69db7c',
   5: '#ffa94d',
-  6: '#1fa3dd'
+  6: '#8b5cf6'
 }
 
 export function getZoneColor(zone) {

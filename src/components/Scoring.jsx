@@ -5,9 +5,10 @@ import HeatmapCourt from './HeatmapCourt'
 
 function Scoring() {
   const [teams, setTeams] = useState([])
-  const [players, setPlayers] = useState([])
   const [selectedTeam, setSelectedTeam] = useState(null)
   const [selectedPlayer, setSelectedPlayer] = useState(null)
+  const [currentRound, setCurrentRound] = useState(1)
+  const [warningMessage, setWarningMessage] = useState('')
   const [zoneStats, setZoneStats] = useState({})
   const [celebratingZones, setCelebratingZones] = useState({})
   const [particles, setParticles] = useState([])
@@ -40,6 +41,11 @@ function Scoring() {
     const player = selectedTeam?.players.find(p => p.id == playerId)
     setSelectedPlayer(player)
     fetchZoneStats(player)
+  }
+
+  const handleRoundSelect = (round) => {
+    setCurrentRound(round)
+    setZoneStats({})
     setShots([])
   }
 
@@ -50,6 +56,7 @@ function Scoring() {
         .from('shots')
         .select('*')
         .eq('player_id', player.id)
+        .eq('round', currentRound)
         .order('created_at', { ascending: false })
       if (error) console.error(error)
       else {
@@ -64,7 +71,7 @@ function Scoring() {
       }
     } else {
       const allShots = JSON.parse(localStorage.getItem('shots') || '[]')
-        .filter(shot => shot.player_id === player.id)
+        .filter(shot => shot.player_id === player.id && (shot.round || 1) === currentRound)
         .sort((a, b) => b.id - a.id) // Sort by id descending (most recent first)
       setShots(allShots)
       const stats = {}
@@ -75,12 +82,23 @@ function Scoring() {
       })
       setZoneStats(stats)
     }
-  }, [])
+  }, [currentRound])
+
+  useEffect(() => {
+    if (selectedPlayer) {
+      fetchZoneStats(selectedPlayer)
+    }
+  }, [selectedPlayer, currentRound, fetchZoneStats])
 
   const recordShot = async (zone, made, event) => {
     if (!selectedPlayer || recordShotRef.current) return
     
     recordShotRef.current = true
+
+    if (currentRound === 2 && shots.length >= 16) {
+      setWarningMessage(`Warning: ${selectedPlayer.name} is above 16 shots in Round 2.`)
+      setTimeout(() => setWarningMessage(''), 2200)
+    }
     
     const points = zone === 1 ? 1 : zone <= 3 ? 2 : 3
     const pointChange = made ? points : 0
@@ -115,6 +133,7 @@ function Scoring() {
       if (supabase) {
         const { error } = await supabase.from('shots').insert([{
           player_id: selectedPlayer.id,
+          round: currentRound,
           zone,
           made,
           points: pointChange
@@ -127,6 +146,7 @@ function Scoring() {
         const newShot = {
           id: Date.now(),
           player_id: selectedPlayer.id,
+          round: currentRound,
           zone,
           made,
           points: pointChange
@@ -213,10 +233,10 @@ function Scoring() {
 
     .undo-button {
       position: fixed;
-      bottom: 2rem;
-      right: 2rem;
-      padding: 1rem 1.5rem;
-      font-size: 14px;
+      bottom: 1rem;
+      right: 1rem;
+      padding: 0.75rem 1rem;
+      font-size: 13px;
       font-weight: bold;
       border: none;
       background: linear-gradient(135deg, #ff9500 0%, #ffb143 100%);
@@ -236,10 +256,25 @@ function Scoring() {
     .undo-button:active {
       transform: translateY(0);
     }
+
+    .warning-popup {
+      position: fixed;
+      top: 1rem;
+      left: 50%;
+      transform: translateX(-50%);
+      background: linear-gradient(135deg, #ef4444 0%, #f97316 100%);
+      color: white;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      border-radius: 10px;
+      padding: 0.7rem 1rem;
+      font-weight: 700;
+      z-index: 2000;
+      box-shadow: 0 8px 25px rgba(0, 0, 0, 0.35);
+    }
   `
 
   return (
-    <div style={{ minHeight: '100vh', padding: '2rem', backgroundColor: 'transparent' }}>
+    <div style={{ minHeight: '100vh', padding: '1rem 0.75rem', backgroundColor: 'transparent' }}>
       <style>{animationStyles}</style>
       
       {/* Confetti Particles */}
@@ -261,83 +296,124 @@ function Scoring() {
         <button
           onClick={undoShot}
           className="undo-button"
-          title="Undo last shot"
+          title="Undo last shot in selected round"
         >
           ↶ Undo Shot
         </button>
       )}
 
+      {warningMessage && <div className="warning-popup">{warningMessage}</div>}
+
       <h1>Scoring</h1>
       {!supabase && <p style={{color: 'red'}}>Using local storage - data will not persist after refresh</p>}
-      
-      {/* Step 1: Select Team */}
-      <div style={{ marginBottom: '2rem', padding: '1.5rem', backgroundColor: 'rgba(79, 163, 255, 0.08)', borderRadius: '8px', border: '1px solid rgba(79, 163, 255, 0.2)' }}>
-        <h2 style={{marginTop: 0, color: '#ffffff'}}>Step 1: Select Team</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem' }}>
-          {teams.map(team => (
+
+      <div style={{ marginBottom: '1rem', padding: '1rem', backgroundColor: 'rgba(79, 163, 255, 0.08)', borderRadius: '8px', border: '1px solid rgba(79, 163, 255, 0.2)' }}>
+        <h2 style={{marginTop: 0, color: '#ffffff'}}>Select Round</h2>
+        <p style={{marginTop: 0, color: 'rgba(255, 255, 255, 0.8)'}}>
+          Round 1: individual scoring leaderboard by player points. Round 2: group scoring with a warning if a player exceeds 16 shots.
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(140px, 1fr))', gap: '0.6rem', maxWidth: '340px' }}>
+          {[1, 2].map(round => (
             <button
-              key={team.id}
-              onClick={() => handleTeamSelect(team.id)}
+              key={round}
+              onClick={() => handleRoundSelect(round)}
               style={{
-                padding: '1rem',
-                fontSize: '16px',
+                padding: '0.55rem 0.8rem',
+                fontSize: '14px',
                 fontWeight: 'bold',
                 border: '2px solid',
-                borderColor: selectedTeam?.id === team.id ? '#3b82f6' : '#d1d5db',
-                backgroundColor: selectedTeam?.id === team.id ? '#dbeafe' : 'white',
-                color: selectedTeam?.id === team.id ? '#1e40af' : '#374151',
+                borderColor: currentRound === round ? '#4fa3ff' : 'rgba(79, 163, 255, 0.3)',
+                backgroundColor: currentRound === round ? 'rgba(79, 163, 255, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                color: '#ffffff',
                 borderRadius: '6px',
                 cursor: 'pointer',
                 transition: 'all 0.2s'
               }}
             >
-              {team.name}
+              Round {round}
             </button>
           ))}
         </div>
       </div>
-
-      {/* Step 2: Select Player */}
-      {selectedTeam && (
-        <div style={{ marginBottom: '2rem', padding: '1.5rem', backgroundColor: 'rgba(79, 163, 255, 0.08)', borderRadius: '8px', border: '1px solid rgba(79, 163, 255, 0.2)' }}>
-          <h2 style={{marginTop: 0, color: '#ffffff'}}>Step 2: Select Player</h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem' }}>
-            {selectedTeam.players.map(player => (
+      
+      <div style={{ display: 'grid', gridTemplateColumns: selectedTeam ? 'repeat(auto-fit, minmax(280px, 1fr))' : '1fr', gap: '1rem', marginBottom: '1rem' }}>
+        {/* Step 1: Select Team */}
+        <div style={{ padding: '1rem', backgroundColor: 'rgba(79, 163, 255, 0.08)', borderRadius: '8px', border: '1px solid rgba(79, 163, 255, 0.2)' }}>
+          <h2 style={{marginTop: 0, color: '#ffffff'}}>Step 1: Select Team (Round {currentRound})</h2>
+          {currentRound === 1 && (
+            <p style={{marginTop: 0, color: 'rgba(255, 255, 255, 0.8)'}}>
+              Teams are used for selection only in round 1. Leaderboard ranking is individual.
+            </p>
+          )}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '0.6rem' }}>
+            {teams.map(team => (
               <button
-                key={player.id}
-                onClick={() => handlePlayerSelect(player.id)}
+                key={team.id}
+                onClick={() => handleTeamSelect(team.id)}
                 style={{
-                  padding: '1rem',
-                  fontSize: '16px',
+                  padding: '0.65rem 0.7rem',
+                  fontSize: '14px',
                   fontWeight: 'bold',
                   border: '2px solid',
-                  borderColor: selectedPlayer?.id === player.id ? '#ec4899' : '#d1d5db',
-                  backgroundColor: selectedPlayer?.id === player.id ? '#fce7f3' : 'white',
-                  color: selectedPlayer?.id === player.id ? '#be185d' : '#374151',
+                  borderColor: selectedTeam?.id === team.id ? '#3b82f6' : '#d1d5db',
+                  backgroundColor: selectedTeam?.id === team.id ? '#dbeafe' : 'white',
+                  color: selectedTeam?.id === team.id ? '#1e40af' : '#374151',
                   borderRadius: '6px',
                   cursor: 'pointer',
                   transition: 'all 0.2s'
                 }}
               >
-                {player.name}
+                {team.name}
               </button>
             ))}
           </div>
         </div>
-      )}
+
+        {/* Step 2: Select Player */}
+        {selectedTeam && (
+          <div style={{ padding: '1rem', backgroundColor: 'rgba(79, 163, 255, 0.08)', borderRadius: '8px', border: '1px solid rgba(79, 163, 255, 0.2)' }}>
+            <h2 style={{marginTop: 0, color: '#ffffff'}}>Step 2: Select Player</h2>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '0.6rem' }}>
+              {selectedTeam.players.map(player => (
+                <button
+                  key={player.id}
+                  onClick={() => handlePlayerSelect(player.id)}
+                  style={{
+                    padding: '0.65rem 0.7rem',
+                    fontSize: '14px',
+                    fontWeight: 'bold',
+                    border: '2px solid',
+                    borderColor: selectedPlayer?.id === player.id ? '#ec4899' : '#d1d5db',
+                    backgroundColor: selectedPlayer?.id === player.id ? '#fce7f3' : 'white',
+                    color: selectedPlayer?.id === player.id ? '#be185d' : '#374151',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  {player.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
 
       <HeatmapCourt
         zoneStats={zoneStats}
-        title={selectedPlayer ? `${selectedPlayer.name} Accuracy Heatmap` : 'Accuracy Heatmap'}
+        title={selectedPlayer ? `${selectedPlayer.name} Accuracy Heatmap (Round ${currentRound})` : `Accuracy Heatmap (Round ${currentRound})`}
       />
 
       {/* Step 3: Record Shots */}
       {selectedPlayer && (
-        <div style={{ padding: '1.5rem', backgroundColor: 'rgba(79, 163, 255, 0.08)', borderRadius: '8px', border: '1px solid rgba(79, 163, 255, 0.2)' }}>
-          <h2 style={{marginTop: 0, color: '#ffffff'}}>Step 3: Record Shots for {selectedPlayer.name}</h2>
+        <div style={{ padding: '1rem', backgroundColor: 'rgba(79, 163, 255, 0.08)', borderRadius: '8px', border: '1px solid rgba(79, 163, 255, 0.2)' }}>
+          <h2 style={{marginTop: 0, color: '#ffffff'}}>Step 3: Record Shots for {selectedPlayer.name} (Round {currentRound})</h2>
+          <p style={{marginTop: 0, color: 'rgba(255, 255, 255, 0.8)'}}>
+            Shots recorded this round for {selectedPlayer.name}: {shots.length}
+          </p>
           
-          <h3 style={{marginBottom: '1.5rem', marginTop: '2rem', color: '#4fa3ff'}}>Click to record a shot:</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem' }}>
+          <h3 style={{marginBottom: '0.8rem', marginTop: '1rem', color: '#4fa3ff'}}>Click to record a shot:</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '0.6rem' }}>
             {zones.map(zone => {
               const stat = zoneStats[zone]
               const made = stat?.made || 0
@@ -346,24 +422,24 @@ function Scoring() {
               return (
                 <div key={zone} style={{
                   backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                  padding: '1rem',
+                  padding: '0.65rem',
                   borderRadius: '8px',
                   border: '1px solid rgba(79, 163, 255, 0.2)',
                   textAlign: 'center'
                 }}>
-                  <div style={{fontSize: '14px', fontWeight: 'bold', marginBottom: '0.5rem', color: '#4fa3ff'}}>Zone {zone}</div>
-                  <div style={{fontSize: '18px', fontWeight: 'bold', marginBottom: '0.75rem', color: '#ffffff'}}>
+                  <div style={{fontSize: '13px', fontWeight: 'bold', marginBottom: '0.35rem', color: '#4fa3ff'}}>Zone {zone}</div>
+                  <div style={{fontSize: '16px', fontWeight: 'bold', marginBottom: '0.45rem', color: '#ffffff'}}>
                     {made}/{total}
                   </div>
                   
-                  <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem'}}>
+                  <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem'}}>
                     {/* Make Button - Checkmark */}
                     <button
                       onClick={(e) => recordShot(zone, true, e)}
                       className={celebratingZones[zone] ? 'celebrating' : ''}
                       style={{
-                        padding: '1rem 0.5rem',
-                        fontSize: '32px',
+                        padding: '0.6rem 0.25rem',
+                        fontSize: '24px',
                         fontWeight: 'bold',
                         border: 'none',
                         backgroundColor: getZoneColor(zone),
@@ -374,7 +450,7 @@ function Scoring() {
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        minHeight: '70px',
+                        minHeight: '54px',
                         textShadow: '0 1px 2px rgba(0,0,0,0.3)'
                       }}
                       onMouseOver={(e) => {
@@ -398,8 +474,8 @@ function Scoring() {
                     <button
                       onClick={(e) => recordShot(zone, false, e)}
                       style={{
-                        padding: '1rem 0.5rem',
-                        fontSize: '32px',
+                        padding: '0.6rem 0.25rem',
+                        fontSize: '24px',
                         fontWeight: 'bold',
                         border: 'none',
                         backgroundColor: getZoneColor(zone),
@@ -410,7 +486,7 @@ function Scoring() {
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        minHeight: '70px',
+                        minHeight: '54px',
                         textShadow: '0 1px 2px rgba(0,0,0,0.3)'
                       }}
                       onMouseOver={(e) => {
