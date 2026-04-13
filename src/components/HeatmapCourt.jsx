@@ -379,7 +379,7 @@ function HeatmapCourt({ zoneStats, title = 'Shot Heatmap' }) {
       </div>
 
       <p style={{ marginBottom: 0, marginTop: '0.7rem', fontSize: '0.82rem', color: 'rgba(255,255,255,0.85)' }}>
-        Heat scale: red = low accuracy, yellow = middle accuracy, green = high accuracy.
+        Heat scale: red = 0-25%, orange = 25-50%, yellow = 50-75%, green = 75-100%.
       </p>
     </div>
   )

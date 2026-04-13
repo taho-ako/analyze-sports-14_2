@@ -7,30 +7,29 @@ export const ZONE_COLORS = {
   6: '#8b5cf6'
 }
 
+export const ACCURACY_HEAT_COLORS = {
+  none: '#9ca3af',
+  red: 'rgb(239, 68, 68)',
+  orange: 'rgb(249, 115, 22)',
+  yellow: 'rgb(234, 179, 8)',
+  green: 'rgb(34, 197, 94)'
+}
+
 export function getZoneColor(zone) {
   return ZONE_COLORS[zone] || '#d1d5db'
 }
 
 export function getAccuracyHeatColor(accuracy, attempts) {
   if (!attempts) {
-    return '#9ca3af'
+    return ACCURACY_HEAT_COLORS.none
   }
 
   const clamped = Math.max(0, Math.min(100, accuracy))
-  let r
-  let g
 
-  if (clamped < 50) {
-    const ratio = clamped / 50
-    r = 239 + (251 - 239) * ratio
-    g = 68 + (191 - 68) * ratio
-  } else {
-    const ratio = (clamped - 50) / 50
-    r = 251 + (34 - 251) * ratio
-    g = 191 + (197 - 191) * ratio
-  }
-
-  return `rgb(${Math.round(r)}, ${Math.round(g)}, 68)`
+  if (clamped < 25) return ACCURACY_HEAT_COLORS.red
+  if (clamped < 50) return ACCURACY_HEAT_COLORS.orange
+  if (clamped < 75) return ACCURACY_HEAT_COLORS.yellow
+  return ACCURACY_HEAT_COLORS.green
 }
 
 export function buildZoneHeatmapModel(zoneStats) {
