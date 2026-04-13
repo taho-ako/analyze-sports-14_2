@@ -5,6 +5,7 @@ A web application for tracking sports teams, players, and scoring with data visu
 ## Features
 
 - Create up to 4 teams with up to 4 players each
+- Two-round flow: round 1 individual leaderboard and round 2 group analytics
 - Interactive scoring with heat map zones
 - Real-time statistics and accuracy tracking
 - Data visualization with charts and tables
@@ -23,6 +24,10 @@ A web application for tracking sports teams, players, and scoring with data visu
 3. Set up Supabase:
    - Create a new Supabase project
    - Run the SQL in `database-schema.sql` to create tables
+   - If your `shots` table already exists, run this migration:
+     ```sql
+     ALTER TABLE shots ADD COLUMN IF NOT EXISTS round INTEGER NOT NULL DEFAULT 1;
+     ```
    - Copy your Supabase URL and anon key
 4. Create `.env` file:
    ```
@@ -34,6 +39,14 @@ A web application for tracking sports teams, players, and scoring with data visu
 ## Database Schema
 
 See `database-schema.sql` for the required tables: teams, players, shots.
+
+## Gameplay Rules
+
+- Round 1 is individual scoring. Players should each take 20 shots (tracked manually by participants).
+- Round 1 leaderboard in Data View ranks players by total points.
+- Round 2 is group scoring. Teams are formed manually by participants.
+- Round 2 target allocation is 30 total shots per team, with each player finishing between 5 and 15 shots.
+- Round 2 limits are advisory in the app (shown as warnings), not hard-enforced.
 
 Pull before you push: Always run git pull origin main to make sure you have the latest code.
 
