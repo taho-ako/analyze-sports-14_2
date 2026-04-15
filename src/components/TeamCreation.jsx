@@ -1,11 +1,49 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../supabaseClient'
 
+const TEAM_COLOR_NAMES = ['Blue Team', 'Red Team', 'Green Team', 'Yellow Team']
+
+const getGeneratedTeamNames = (totalTeams) => TEAM_COLOR_NAMES.slice(0, totalTeams)
+const idsMatch = (left, right) => String(left) === String(right)
+const getDefaultPointsByZone = (zone) => (zone === 1 ? 1 : zone <= 3 ? 2 : 3)
+
+const toRestoredShotCore = (shot, playerId) => {
+  const zone = Number(shot?.zone)
+  if (!Number.isInteger(zone) || zone < 1) return null
+
+  const roundValue = Number(shot?.round)
+  const round = Number.isInteger(roundValue) && roundValue > 0 ? roundValue : 1
+
+  const pointsValue = Number(shot?.points)
+  const points = Number.isFinite(pointsValue) ? pointsValue : getDefaultPointsByZone(zone)
+
+  return {
+    player_id: playerId,
+    round,
+    zone,
+    made: Boolean(shot?.made),
+    points
+  }
+}
+
+const toLocalRestoredShot = (shot, playerId, shotId) => {
+  const shotCore = toRestoredShotCore(shot, playerId)
+  if (!shotCore) return null
+
+  return {
+    id: shotId,
+    ...shotCore
+  }
+}
+
 function TeamCreation() {
   const [teams, setTeams] = useState([])
-  const [newTeamName, setNewTeamName] = useState('')
-  const [selectedTeam, setSelectedTeam] = useState(null)
-  const [newPlayerName, setNewPlayerName] = useState('')
+  const [teamCount, setTeamCount] = useState(4)
+  const [playerCount, setPlayerCount] = useState(16)
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [activeMovePlayerId, setActiveMovePlayerId] = useState(null)
+  const [recentlyDeletedPlayers, setRecentlyDeletedPlayers] = useState([])
+  const [restoreTeamByPlayerKey, setRestoreTeamByPlayerKey] = useState({})
   const [notification, setNotification] = useState(null)
 
   const fetchTeams = useCallback(async () => {
@@ -24,8 +62,37 @@ function TeamCreation() {
     setTimeout(() => setNotification(null), 3000)
   }
 
+  const getBalancedRosterPreview = useCallback(() => {
+    const safeTeamCount = Math.max(1, Number(teamCount) || 1)
+    const safePlayerCount = Math.max(0, Number(playerCount) || 0)
+    const baseCount = Math.floor(safePlayerCount / safeTeamCount)
+    const extraPlayers = safePlayerCount % safeTeamCount
+
+    return Array.from({ length: safeTeamCount }, (_, index) => baseCount + (index < extraPlayers ? 1 : 0))
+  }, [teamCount, playerCount])
+
+  const buildLocalRoster = (totalTeams, totalPlayers) => {
+    const timeBase = Date.now()
+    const generatedTeamNames = getGeneratedTeamNames(totalTeams)
+    const generatedTeams = Array.from({ length: totalTeams }, (_, index) => ({
+      id: timeBase + index,
+      name: generatedTeamNames[index],
+      players: []
+    }))
+
+    for (let index = 0; index < totalPlayers; index++) {
+      const targetTeamIndex = index % totalTeams
+      generatedTeams[targetTeamIndex].players.push({
+        id: timeBase + totalTeams + index,
+        name: `Player ${index + 1}`
+      })
+    }
+
+    return generatedTeams
+  }
+
   useEffect(() => {
-    fetchTeams() // eslint-disable-line react-hooks/exhaustive-deps
+    fetchTeams()
 
     const handleUnload = () => {
       if (!supabase) {
@@ -37,83 +104,260 @@ function TeamCreation() {
     return () => window.removeEventListener('beforeunload', handleUnload)
   }, [fetchTeams])
 
-  const createTeam = async () => {
-    const trimmedName = newTeamName.trim()
-    if (!trimmedName) return showNotification('Team name cannot be empty')
-    if (teams.length >= 4) return showNotification('Maximum 4 teams')
-    const teamExists = teams.some(team => team.name.trim().toLowerCase() === trimmedName.toLowerCase())
-    if (teamExists) return showNotification('Team name already exists')
+  const generateTeamsAndPlayers = async () => {
+    const safeTeamCount = Number(teamCount)
+    const safePlayerCount = Number(playerCount)
 
-    if (supabase) {
-      const { error } = await supabase.from('teams').insert([{ name: trimmedName }])
-      if (error) console.error(error)
-      else {
-        setNewTeamName('')
-        fetchTeams()
-      }
-    } else {
-      const newTeam = { id: Date.now(), name: trimmedName, players: [] }
-      const updatedTeams = [...teams, newTeam]
-      localStorage.setItem('teams', JSON.stringify(updatedTeams))
-      setTeams(updatedTeams)
-      setNewTeamName('')
+    if (!Number.isInteger(safeTeamCount) || safeTeamCount < 1 || safeTeamCount > 4) {
+      return showNotification('Choose between 1 and 4 teams')
     }
-  }
 
-  const addPlayer = async () => {
-    if (!selectedTeam) return showNotification('Select a team first')
+    if (!Number.isInteger(safePlayerCount) || safePlayerCount < 1 || safePlayerCount > 18) {
+      return showNotification('Players must be between 1 and 18')
+    }
 
-    const team = teams.find(t => t.id === selectedTeam.id)
-    if (!team) return showNotification('Selected team not found')
+    const generatedTeamNames = getGeneratedTeamNames(safeTeamCount)
 
-    const trimmedPlayerName = newPlayerName.trim()
-    if (!trimmedPlayerName) return showNotification('Player name cannot be empty')
+    setIsGenerating(true)
 
-    if (team.players.length >= 4) return showNotification('Maximum 4 players per team')
+    try {
+      if (supabase) {
+        const { error: deleteTeamsError } = await supabase
+          .from('teams')
+          .delete()
+          .gte('id', 1)
 
-    const playerExists = teams.some(teamItem =>
-      teamItem.players.some(player => player.name.trim().toLowerCase() === trimmedPlayerName.toLowerCase())
-    )
-    if (playerExists) return showNotification('A player with that name already exists')
-
-    if (supabase) {
-      const { error } = await supabase.from('players').insert([{ name: trimmedPlayerName, team_id: selectedTeam.id }])
-      if (error) console.error(error)
-      else {
-        setNewPlayerName('')
-        fetchTeams()
-      }
-    } else {
-      const updatedTeams = teams.map(teamItem => {
-        if (teamItem.id === selectedTeam.id) {
-          return { ...teamItem, players: [...teamItem.players, { id: Date.now(), name: trimmedPlayerName }] }
+        if (deleteTeamsError) {
+          console.error(deleteTeamsError)
+          return showNotification('Unable to clear existing teams')
         }
-        return teamItem
-      })
-      localStorage.setItem('teams', JSON.stringify(updatedTeams))
-      setTeams(updatedTeams)
-      setSelectedTeam(updatedTeams.find(t => t.id === selectedTeam.id) || null)
-      setNewPlayerName('')
+
+        const { data: createdTeams, error: createTeamsError } = await supabase
+          .from('teams')
+          .insert(generatedTeamNames.map(name => ({ name })))
+          .select('id, name')
+
+        if (createTeamsError || !createdTeams) {
+          if (createTeamsError) console.error(createTeamsError)
+          return showNotification('Unable to generate teams')
+        }
+
+        const teamIdByName = new Map(createdTeams.map(team => [team.name, team.id]))
+        const generatedPlayers = Array.from({ length: safePlayerCount }, (_, index) => {
+          const teamName = generatedTeamNames[index % safeTeamCount]
+
+          return {
+            name: `Player ${index + 1}`,
+            team_id: teamIdByName.get(teamName)
+          }
+        })
+
+        const { error: createPlayersError } = await supabase
+          .from('players')
+          .insert(generatedPlayers)
+
+        if (createPlayersError) {
+          console.error(createPlayersError)
+          return showNotification('Teams were generated, but player creation failed')
+        }
+
+        await fetchTeams()
+      } else {
+        const generatedTeams = buildLocalRoster(safeTeamCount, safePlayerCount)
+        localStorage.setItem('teams', JSON.stringify(generatedTeams))
+        localStorage.setItem('shots', JSON.stringify([]))
+        setTeams(generatedTeams)
+      }
+
+      setRecentlyDeletedPlayers([])
+      setRestoreTeamByPlayerKey({})
+      showNotification(`Generated ${safeTeamCount} teams and ${safePlayerCount} players`)
+    } finally {
+      setIsGenerating(false)
     }
   }
 
   const removePlayer = async (playerId, teamId) => {
+    const sourceTeam = teams.find(teamItem => idsMatch(teamItem.id, teamId))
+    const playerToRemove = sourceTeam?.players.find(player => idsMatch(player.id, playerId))
+    if (!sourceTeam || !playerToRemove) return showNotification('Player not found')
+
+    const deletedKey = `${Date.now()}-${playerToRemove.id}`
+    let savedShots = []
+
     if (supabase) {
+      const { data: playerShots, error: playerShotsError } = await supabase
+        .from('shots')
+        .select('round, zone, made, points')
+        .eq('player_id', playerId)
+
+      if (playerShotsError) {
+        console.error(playerShotsError)
+        return showNotification('Unable to save player scores before deleting')
+      }
+
+      savedShots = playerShots || []
+
       const { error } = await supabase.from('players').delete().eq('id', playerId)
-      if (error) return console.error(error)
-      fetchTeams()
-      return
+      if (error) {
+        console.error(error)
+        return showNotification('Unable to remove player')
+      }
+
+      await fetchTeams()
+    } else {
+      const allShots = JSON.parse(localStorage.getItem('shots') || '[]')
+      savedShots = allShots.filter(shot => idsMatch(shot.player_id, playerId))
+
+      const updatedTeams = teams.map(teamItem => {
+        if (idsMatch(teamItem.id, teamId)) {
+          return { ...teamItem, players: teamItem.players.filter(player => !idsMatch(player.id, playerId)) }
+        }
+        return teamItem
+      })
+
+      const remainingShots = allShots.filter(shot => !idsMatch(shot.player_id, playerId))
+      localStorage.setItem('teams', JSON.stringify(updatedTeams))
+      localStorage.setItem('shots', JSON.stringify(remainingShots))
+      setTeams(updatedTeams)
     }
 
-    const updatedTeams = teams.map(teamItem => {
-      if (teamItem.id === teamId) {
-        return { ...teamItem, players: teamItem.players.filter(player => player.id !== playerId) }
+    setRecentlyDeletedPlayers(prev => [
+      {
+        deletedKey,
+        name: playerToRemove.name,
+        originalPlayerId: playerToRemove.id,
+        originalTeamId: sourceTeam.id,
+        originalTeamName: sourceTeam.name,
+        savedShots
+      },
+      ...prev
+    ].slice(0, 10))
+
+    setRestoreTeamByPlayerKey(prev => ({
+      ...prev,
+      [deletedKey]: sourceTeam.id
+    }))
+
+    const savedShotCount = savedShots.length
+    const shotLabel = savedShotCount === 1 ? 'shot' : 'shots'
+    showNotification(`${playerToRemove.name} removed. ${savedShotCount} ${shotLabel} saved for restore.`)
+  }
+
+  const restorePlayer = async (deletedKey) => {
+    const deletedPlayer = recentlyDeletedPlayers.find(player => player.deletedKey === deletedKey)
+    if (!deletedPlayer) return
+
+    const selectedTeamId = restoreTeamByPlayerKey[deletedKey]
+    const fallbackTeamId = teams[0]?.id
+    const targetTeamId = selectedTeamId ?? fallbackTeamId
+    const targetTeam = teams.find(teamItem => idsMatch(teamItem.id, targetTeamId))
+    const savedShots = Array.isArray(deletedPlayer.savedShots) ? deletedPlayer.savedShots : []
+
+    if (!targetTeam) return showNotification('Choose a team before restoring')
+
+    if (supabase) {
+      const { data: restoredPlayer, error } = await supabase
+        .from('players')
+        .insert([{ name: deletedPlayer.name, team_id: targetTeam.id }])
+        .select('id')
+        .single()
+
+      if (error || !restoredPlayer) {
+        console.error(error)
+        return showNotification('Unable to restore player')
       }
-      return teamItem
+
+      if (savedShots.length > 0) {
+        const restoredShots = savedShots
+          .map(savedShot => toRestoredShotCore(savedShot, restoredPlayer.id))
+          .filter(Boolean)
+
+        if (restoredShots.length > 0) {
+          const { error: restoreShotsError } = await supabase.from('shots').insert(restoredShots)
+
+          if (restoreShotsError) {
+            console.error(restoreShotsError)
+            await supabase.from('players').delete().eq('id', restoredPlayer.id)
+            return showNotification('Unable to restore player score history')
+          }
+        }
+      }
+
+      await fetchTeams()
+    } else {
+      let restoredPlayerId = deletedPlayer.originalPlayerId ?? Date.now()
+      const playerIdAlreadyExists = teams.some(teamItem =>
+        teamItem.players.some(player => idsMatch(player.id, restoredPlayerId))
+      )
+
+      if (playerIdAlreadyExists) {
+        restoredPlayerId = Date.now()
+      }
+
+      const restoredPlayer = {
+        id: restoredPlayerId,
+        name: deletedPlayer.name
+      }
+
+      const updatedTeams = teams.map(teamItem => {
+        if (idsMatch(teamItem.id, targetTeam.id)) {
+          return { ...teamItem, players: [...teamItem.players, restoredPlayer] }
+        }
+        return teamItem
+      })
+
+      const existingShots = JSON.parse(localStorage.getItem('shots') || '[]')
+      const shotIdBase = Date.now()
+      const restoredShots = savedShots
+        .map((savedShot, index) => toLocalRestoredShot(savedShot, restoredPlayerId, shotIdBase + index))
+        .filter(Boolean)
+
+      localStorage.setItem('teams', JSON.stringify(updatedTeams))
+      localStorage.setItem('shots', JSON.stringify([...existingShots, ...restoredShots]))
+      setTeams(updatedTeams)
+    }
+
+    setRecentlyDeletedPlayers(prev => prev.filter(player => player.deletedKey !== deletedKey))
+    setRestoreTeamByPlayerKey(prev => {
+      const next = { ...prev }
+      delete next[deletedKey]
+      return next
     })
-    localStorage.setItem('teams', JSON.stringify(updatedTeams))
-    setTeams(updatedTeams)
-    if (selectedTeam?.id === teamId) setSelectedTeam(updatedTeams.find(t => t.id === teamId) || null)
+
+    const restoredShotCount = savedShots.length
+    const shotLabel = restoredShotCount === 1 ? 'shot' : 'shots'
+    const restoreMessage = restoredShotCount > 0
+      ? `${deletedPlayer.name} restored to ${targetTeam.name} with ${restoredShotCount} ${shotLabel}.`
+      : `${deletedPlayer.name} restored to ${targetTeam.name}`
+
+    showNotification(restoreMessage)
+  }
+
+  const clearPlayerData = async (playerId, playerName) => {
+    const shouldClearData = window.confirm(
+      `Clear all scoring data for ${playerName}? This cannot be undone.`
+    )
+
+    if (!shouldClearData) return
+
+    if (supabase) {
+      const { error } = await supabase
+        .from('shots')
+        .delete()
+        .eq('player_id', playerId)
+
+      if (error) {
+        console.error(error)
+        return showNotification('Unable to clear player data')
+      }
+    } else {
+      const allShots = JSON.parse(localStorage.getItem('shots') || '[]')
+      const filteredShots = allShots.filter(shot => !idsMatch(shot.player_id, playerId))
+      localStorage.setItem('shots', JSON.stringify(filteredShots))
+    }
+
+    showNotification(`All scoring data for ${playerName} has been cleared.`)
   }
 
   const movePlayer = async (playerId, fromTeamId, toTeamId) => {
@@ -121,8 +365,6 @@ function TeamCreation() {
     const fromTeam = teams.find(t => t.id === fromTeamId || t.id === Number(fromTeamId))
     const toTeam = teams.find(t => t.id === toTeamId || t.id === Number(toTeamId))
     if (!fromTeam || !toTeam) return showNotification('Team not found')
-
-    if (toTeam.players.length >= 4) return showNotification('Destination team already has 4 players')
 
     if (supabase) {
       const { error } = await supabase.from('players').update({ team_id: toTeamId }).eq('id', playerId)
@@ -146,19 +388,19 @@ function TeamCreation() {
 
     localStorage.setItem('teams', JSON.stringify(updatedTeams))
     setTeams(updatedTeams)
-    setSelectedTeam(updatedTeams.find(t => t.id === selectedTeam?.id) || null)
+  }
+
+  const toggleMoveMenu = (playerId) => {
+    setActiveMovePlayerId(prev => (prev === playerId ? null : playerId))
+  }
+
+  const handleMoveSelection = async (playerId, fromTeamId, toTeamId) => {
+    await movePlayer(playerId, fromTeamId, toTeamId)
+    setActiveMovePlayerId(null)
   }
 
   const removeTeam = async (teamId) => {
     if (supabase) {
-      // First delete all players in this team
-      const team = teams.find(t => t.id === teamId)
-      if (team && team.players) {
-        for (const player of team.players) {
-          await supabase.from('players').delete().eq('id', player.id)
-        }
-      }
-      // Then delete the team
       const { error } = await supabase.from('teams').delete().eq('id', teamId)
       if (error) return console.error(error)
       fetchTeams()
@@ -168,7 +410,6 @@ function TeamCreation() {
     const updatedTeams = teams.filter(t => t.id !== teamId)
     localStorage.setItem('teams', JSON.stringify(updatedTeams))
     setTeams(updatedTeams)
-    if (selectedTeam?.id === teamId) setSelectedTeam(null)
   }
 
   return (
@@ -254,31 +495,122 @@ function TeamCreation() {
         }
       `}</style>
       
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', marginBottom: '3rem' }}>
-        {teams.length < 4 && (
-          <div style={{ padding: '1.5rem', backgroundColor: 'rgba(79, 163, 255, 0.08)', borderRadius: '8px', border: '1px solid rgba(79, 163, 255, 0.2)' }}>
-            <h2 style={{marginTop: 0, color: '#ffffff'}}>Create Team</h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
-              <input value={newTeamName} onChange={(e) => setNewTeamName(e.target.value)} placeholder="Team Name" />
-              <button onClick={createTeam} style={{padding: '0.7em 1.4em', fontSize: '0.95em'}}>Create Team</button>
-            </div>
-          </div>
-        )}
-        
-        <div style={{ padding: '1.5rem', backgroundColor: 'rgba(79, 163, 255, 0.08)', borderRadius: '8px', border: '1px solid rgba(79, 163, 255, 0.2)' }}>
-          <h2 style={{marginTop: 0, color: '#ffffff'}}>Add Player</h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
-            <select onChange={(e) => setSelectedTeam(teams.find(t => t.id == e.target.value))}>
-              <option>Select Team</option>
-              {teams.map(team => <option key={team.id} value={team.id}>{team.name}</option>)}
+      <div style={{ padding: '1.5rem', backgroundColor: 'rgba(79, 163, 255, 0.08)', borderRadius: '8px', border: '1px solid rgba(79, 163, 255, 0.2)', marginBottom: '2rem' }}>
+        <h2 style={{marginTop: 0, color: '#ffffff'}}>Auto Generate Teams & Players</h2>
+        <p style={{ marginTop: 0, color: 'rgba(255, 255, 255, 0.8)' }}>
+          Select how many teams and players you want, then generate balanced rosters automatically.
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.8rem', alignItems: 'end' }}>
+          <label style={{ color: '#ffffff', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+            Teams
+            <select
+              value={teamCount}
+              onChange={(e) => setTeamCount(Number(e.target.value))}
+            >
+              {Array.from({ length: 4 }, (_, index) => index + 1).map(count => (
+                <option key={count} value={count}>{count}</option>
+              ))}
             </select>
-            <input value={newPlayerName} onChange={(e) => setNewPlayerName(e.target.value)} placeholder="Player Name" />
-            <button onClick={addPlayer} style={{padding: '0.7em 1.4em', fontSize: '0.95em'}}>Add Player</button>
-          </div>
+          </label>
+
+          <label style={{ color: '#ffffff', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+            Total Players
+            <select
+              value={playerCount}
+              onChange={(e) => setPlayerCount(Number(e.target.value))}
+            >
+              {Array.from({ length: 18 }, (_, index) => index + 1).map(count => (
+                <option key={count} value={count}>{count}</option>
+              ))}
+            </select>
+          </label>
+
+          <button
+            onClick={generateTeamsAndPlayers}
+            disabled={isGenerating}
+            style={{padding: '0.7em 1.4em', fontSize: '0.95em', opacity: isGenerating ? 0.7 : 1, cursor: isGenerating ? 'not-allowed' : 'pointer'}}
+          >
+            {isGenerating ? 'Generating...' : 'Generate Teams'}
+          </button>
         </div>
+
+        <p style={{ marginBottom: 0, marginTop: '0.9rem', color: 'rgba(255, 255, 255, 0.75)' }}>
+          Team size preview: {getBalancedRosterPreview().join(' / ')} players per team.
+        </p>
+        <p style={{ marginBottom: 0, marginTop: '0.4rem', color: 'rgba(255, 255, 255, 0.6)' }}>
+          Generating replaces current teams and players. You can still move players between teams below for Round 2 adjustments.
+        </p>
       </div>
       
       <div style={{ padding: '2rem', backgroundColor: 'rgba(255, 255, 255, 0.03)', borderRadius: '12px', border: '1px solid rgba(79, 163, 255, 0.15)' }}>
+        {recentlyDeletedPlayers.length > 0 && (
+          <div style={{ marginBottom: '1.5rem', padding: '1rem', backgroundColor: 'rgba(79, 163, 255, 0.08)', borderRadius: '8px', border: '1px solid rgba(79, 163, 255, 0.25)' }}>
+            <h3 style={{ marginTop: 0, marginBottom: '0.7rem', color: '#ffffff' }}>Recently Deleted Players</h3>
+            <p style={{ marginTop: 0, marginBottom: '0.8rem', color: 'rgba(255, 255, 255, 0.75)' }}>
+              Bring players back and choose which team they should return to.
+            </p>
+            <div style={{ display: 'grid', gap: '0.55rem' }}>
+              {recentlyDeletedPlayers.map(deletedPlayer => (
+                <div
+                  key={deletedPlayer.deletedKey}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: '0.65rem',
+                    flexWrap: 'wrap',
+                    padding: '0.55rem 0.65rem',
+                    borderRadius: '6px',
+                    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+                    border: '1px solid rgba(79, 163, 255, 0.2)'
+                  }}
+                >
+                  <div>
+                    <strong style={{ color: '#ffffff' }}>{deletedPlayer.name}</strong>
+                    <p style={{ margin: '0.2rem 0 0', color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.82rem' }}>
+                      Removed from {deletedPlayer.originalTeamName}
+                    </p>
+                    <p style={{ margin: '0.2rem 0 0', color: 'rgba(255, 255, 255, 0.62)', fontSize: '0.76rem' }}>
+                      Saved shots: {deletedPlayer.savedShots?.length || 0}
+                    </p>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                    <select
+                      value={restoreTeamByPlayerKey[deletedPlayer.deletedKey] ?? ''}
+                      onChange={(e) => {
+                        setRestoreTeamByPlayerKey(prev => ({
+                          ...prev,
+                          [deletedPlayer.deletedKey]: Number(e.target.value)
+                        }))
+                      }}
+                      style={{ width: 'auto', minWidth: '140px', fontSize: '0.9rem', padding: '0.35rem 0.55rem' }}
+                    >
+                      {teams.map(teamItem => (
+                        <option key={teamItem.id} value={teamItem.id}>{teamItem.name}</option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={() => restorePlayer(deletedPlayer.deletedKey)}
+                      disabled={teams.length === 0}
+                      style={{
+                        padding: '0.35rem 0.7rem',
+                        fontSize: '0.85rem',
+                        backgroundColor: teams.length === 0 ? 'rgba(79, 163, 255, 0.2)' : 'rgba(79, 163, 255, 0.7)',
+                        border: '1px solid rgba(79, 163, 255, 0.8)',
+                        color: '#ffffff',
+                        borderRadius: '6px',
+                        cursor: teams.length === 0 ? 'not-allowed' : 'pointer'
+                      }}
+                    >
+                      Restore
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <h2 style={{marginTop: 0, color: '#4fa3ff', marginBottom: '1.5rem'}}>Teams & Players</h2>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.5rem' }}>
           {teams.length === 0 ? (
@@ -302,28 +634,69 @@ function TeamCreation() {
                   <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                     {team.players.map(player => (
                       <li key={player.id} style={{ padding: '0.8rem', marginBottom: '0.5rem', backgroundColor: 'rgba(255, 255, 255, 0.08)', borderRadius: '6px', border: '1px solid rgba(79, 163, 255, 0.2)', color: '#ffffff' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                           <span>{player.name}</span>
-                          <div style={{ display: 'flex', gap: '0.3rem' }}>
-                            <button onClick={() => removePlayer(player.id, team.id)} style={{ padding: '0.3em 0.6em', fontSize: '0.8em' }} title="Remove player">×</button>
-                            <select
-                              onChange={(e) => {
-                                if (!e.target.value) return
-                                movePlayer(player.id, team.id, Number(e.target.value))
+                          <div style={{ display: 'flex', gap: '0.35rem' }}>
+                            {teams.length > 1 && (
+                              <button
+                                onClick={() => toggleMoveMenu(player.id)}
+                                style={{
+                                  padding: '0.3em 0.7em',
+                                  fontSize: '0.8em',
+                                  backgroundColor: activeMovePlayerId === player.id ? 'rgba(79, 163, 255, 0.85)' : 'rgba(79, 163, 255, 0.45)',
+                                  border: '1px solid rgba(79, 163, 255, 0.7)',
+                                  color: '#ffffff',
+                                  borderRadius: '999px',
+                                  cursor: 'pointer'
+                                }}
+                                title="Choose a team to move this player"
+                              >
+                                {activeMovePlayerId === player.id ? 'Cancel' : 'Move'}
+                              </button>
+                            )}
+                            <button
+                              onClick={() => clearPlayerData(player.id, player.name)}
+                              style={{
+                                padding: '0.3em 0.6em',
+                                fontSize: '0.72em',
+                                backgroundColor: 'rgba(245, 158, 11, 0.26)',
+                                border: '1px solid rgba(245, 158, 11, 0.8)',
+                                color: '#ffffff',
+                                borderRadius: '999px',
+                                cursor: 'pointer'
                               }}
-                              value=""
-                              style={{ fontSize: '0.8em', padding: '0.3em 0.6em' }}
-                              title="Move to another team"
+                              title="Clear all score data for this player"
                             >
-                              <option value="">→</option>
-                              {teams
-                                .filter(dest => dest.id !== team.id)
-                                .map(dest => (
-                                  <option key={dest.id} value={dest.id}>{dest.name}</option>
-                                ))}
-                            </select>
+                              Clear Data
+                            </button>
+                            <button onClick={() => removePlayer(player.id, team.id)} style={{ padding: '0.3em 0.6em', fontSize: '0.8em' }} title="Remove player">×</button>
                           </div>
                         </div>
+
+                        {activeMovePlayerId === player.id && teams.length > 1 && (
+                          <div style={{ marginTop: '0.6rem', display: 'flex', flexWrap: 'wrap', gap: '0.35rem', alignItems: 'center' }}>
+                            <span style={{ fontSize: '0.78rem', color: 'rgba(255, 255, 255, 0.85)' }}>Move to:</span>
+                            {teams
+                              .filter(dest => dest.id !== team.id)
+                              .map(dest => (
+                                <button
+                                  key={dest.id}
+                                  onClick={() => handleMoveSelection(player.id, team.id, dest.id)}
+                                  style={{
+                                    padding: '0.3em 0.65em',
+                                    fontSize: '0.8em',
+                                    borderRadius: '999px',
+                                    border: '1px solid rgba(255, 255, 255, 0.3)',
+                                    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+                                    color: '#ffffff',
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  {dest.name}
+                                </button>
+                              ))}
+                          </div>
+                        )}
                       </li>
                     ))}
                   </ul>
