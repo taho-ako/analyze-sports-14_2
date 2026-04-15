@@ -5,6 +5,36 @@ const TEAM_COLOR_NAMES = ['Blue Team', 'Red Team', 'Green Team', 'Yellow Team']
 
 const getGeneratedTeamNames = (totalTeams) => TEAM_COLOR_NAMES.slice(0, totalTeams)
 const idsMatch = (left, right) => String(left) === String(right)
+const getDefaultPointsByZone = (zone) => (zone === 1 ? 1 : zone <= 3 ? 2 : 3)
+
+const toRestoredShotCore = (shot, playerId) => {
+  const zone = Number(shot?.zone)
+  if (!Number.isInteger(zone) || zone < 1) return null
+
+  const roundValue = Number(shot?.round)
+  const round = Number.isInteger(roundValue) && roundValue > 0 ? roundValue : 1
+
+  const pointsValue = Number(shot?.points)
+  const points = Number.isFinite(pointsValue) ? pointsValue : getDefaultPointsByZone(zone)
+
+  return {
+    player_id: playerId,
+    round,
+    zone,
+    made: Boolean(shot?.made),
+    points
+  }
+}
+
+const toLocalRestoredShot = (shot, playerId, shotId) => {
+  const shotCore = toRestoredShotCore(shot, playerId)
+  if (!shotCore) return null
+
+  return {
+    id: shotId,
+    ...shotCore
+  }
+}
 
 function TeamCreation() {
   const [teams, setTeams] = useState([])
@@ -153,19 +183,42 @@ function TeamCreation() {
     if (!sourceTeam || !playerToRemove) return showNotification('Player not found')
 
     const deletedKey = `${Date.now()}-${playerToRemove.id}`
+    let savedShots = []
 
     if (supabase) {
+      const { data: playerShots, error: playerShotsError } = await supabase
+        .from('shots')
+        .select('round, zone, made, points')
+        .eq('player_id', playerId)
+
+      if (playerShotsError) {
+        console.error(playerShotsError)
+        return showNotification('Unable to save player scores before deleting')
+      }
+
+      savedShots = playerShots || []
+
       const { error } = await supabase.from('players').delete().eq('id', playerId)
-      if (error) return console.error(error)
-      fetchTeams()
+      if (error) {
+        console.error(error)
+        return showNotification('Unable to remove player')
+      }
+
+      await fetchTeams()
     } else {
+      const allShots = JSON.parse(localStorage.getItem('shots') || '[]')
+      savedShots = allShots.filter(shot => idsMatch(shot.player_id, playerId))
+
       const updatedTeams = teams.map(teamItem => {
-        if (teamItem.id === teamId) {
-          return { ...teamItem, players: teamItem.players.filter(player => player.id !== playerId) }
+        if (idsMatch(teamItem.id, teamId)) {
+          return { ...teamItem, players: teamItem.players.filter(player => !idsMatch(player.id, playerId)) }
         }
         return teamItem
       })
+
+      const remainingShots = allShots.filter(shot => !idsMatch(shot.player_id, playerId))
       localStorage.setItem('teams', JSON.stringify(updatedTeams))
+      localStorage.setItem('shots', JSON.stringify(remainingShots))
       setTeams(updatedTeams)
     }
 
@@ -173,8 +226,10 @@ function TeamCreation() {
       {
         deletedKey,
         name: playerToRemove.name,
+        originalPlayerId: playerToRemove.id,
         originalTeamId: sourceTeam.id,
-        originalTeamName: sourceTeam.name
+        originalTeamName: sourceTeam.name,
+        savedShots
       },
       ...prev
     ].slice(0, 10))
@@ -184,7 +239,9 @@ function TeamCreation() {
       [deletedKey]: sourceTeam.id
     }))
 
-    showNotification(`${playerToRemove.name} removed. You can restore below.`)
+    const savedShotCount = savedShots.length
+    const shotLabel = savedShotCount === 1 ? 'shot' : 'shots'
+    showNotification(`${playerToRemove.name} removed. ${savedShotCount} ${shotLabel} saved for restore.`)
   }
 
   const restorePlayer = async (deletedKey) => {
@@ -195,23 +252,51 @@ function TeamCreation() {
     const fallbackTeamId = teams[0]?.id
     const targetTeamId = selectedTeamId ?? fallbackTeamId
     const targetTeam = teams.find(teamItem => idsMatch(teamItem.id, targetTeamId))
+    const savedShots = Array.isArray(deletedPlayer.savedShots) ? deletedPlayer.savedShots : []
 
     if (!targetTeam) return showNotification('Choose a team before restoring')
 
     if (supabase) {
-      const { error } = await supabase
+      const { data: restoredPlayer, error } = await supabase
         .from('players')
         .insert([{ name: deletedPlayer.name, team_id: targetTeam.id }])
+        .select('id')
+        .single()
 
-      if (error) {
+      if (error || !restoredPlayer) {
         console.error(error)
         return showNotification('Unable to restore player')
       }
 
-      fetchTeams()
+      if (savedShots.length > 0) {
+        const restoredShots = savedShots
+          .map(savedShot => toRestoredShotCore(savedShot, restoredPlayer.id))
+          .filter(Boolean)
+
+        if (restoredShots.length > 0) {
+          const { error: restoreShotsError } = await supabase.from('shots').insert(restoredShots)
+
+          if (restoreShotsError) {
+            console.error(restoreShotsError)
+            await supabase.from('players').delete().eq('id', restoredPlayer.id)
+            return showNotification('Unable to restore player score history')
+          }
+        }
+      }
+
+      await fetchTeams()
     } else {
+      let restoredPlayerId = deletedPlayer.originalPlayerId ?? Date.now()
+      const playerIdAlreadyExists = teams.some(teamItem =>
+        teamItem.players.some(player => idsMatch(player.id, restoredPlayerId))
+      )
+
+      if (playerIdAlreadyExists) {
+        restoredPlayerId = Date.now()
+      }
+
       const restoredPlayer = {
-        id: Date.now(),
+        id: restoredPlayerId,
         name: deletedPlayer.name
       }
 
@@ -222,7 +307,14 @@ function TeamCreation() {
         return teamItem
       })
 
+      const existingShots = JSON.parse(localStorage.getItem('shots') || '[]')
+      const shotIdBase = Date.now()
+      const restoredShots = savedShots
+        .map((savedShot, index) => toLocalRestoredShot(savedShot, restoredPlayerId, shotIdBase + index))
+        .filter(Boolean)
+
       localStorage.setItem('teams', JSON.stringify(updatedTeams))
+      localStorage.setItem('shots', JSON.stringify([...existingShots, ...restoredShots]))
       setTeams(updatedTeams)
     }
 
@@ -233,7 +325,39 @@ function TeamCreation() {
       return next
     })
 
-    showNotification(`${deletedPlayer.name} restored to ${targetTeam.name}`)
+    const restoredShotCount = savedShots.length
+    const shotLabel = restoredShotCount === 1 ? 'shot' : 'shots'
+    const restoreMessage = restoredShotCount > 0
+      ? `${deletedPlayer.name} restored to ${targetTeam.name} with ${restoredShotCount} ${shotLabel}.`
+      : `${deletedPlayer.name} restored to ${targetTeam.name}`
+
+    showNotification(restoreMessage)
+  }
+
+  const clearPlayerData = async (playerId, playerName) => {
+    const shouldClearData = window.confirm(
+      `Clear all scoring data for ${playerName}? This cannot be undone.`
+    )
+
+    if (!shouldClearData) return
+
+    if (supabase) {
+      const { error } = await supabase
+        .from('shots')
+        .delete()
+        .eq('player_id', playerId)
+
+      if (error) {
+        console.error(error)
+        return showNotification('Unable to clear player data')
+      }
+    } else {
+      const allShots = JSON.parse(localStorage.getItem('shots') || '[]')
+      const filteredShots = allShots.filter(shot => !idsMatch(shot.player_id, playerId))
+      localStorage.setItem('shots', JSON.stringify(filteredShots))
+    }
+
+    showNotification(`All scoring data for ${playerName} has been cleared.`)
   }
 
   const movePlayer = async (playerId, fromTeamId, toTeamId) => {
@@ -446,6 +570,9 @@ function TeamCreation() {
                     <p style={{ margin: '0.2rem 0 0', color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.82rem' }}>
                       Removed from {deletedPlayer.originalTeamName}
                     </p>
+                    <p style={{ margin: '0.2rem 0 0', color: 'rgba(255, 255, 255, 0.62)', fontSize: '0.76rem' }}>
+                      Saved shots: {deletedPlayer.savedShots?.length || 0}
+                    </p>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
                     <select
@@ -527,6 +654,21 @@ function TeamCreation() {
                                 {activeMovePlayerId === player.id ? 'Cancel' : 'Move'}
                               </button>
                             )}
+                            <button
+                              onClick={() => clearPlayerData(player.id, player.name)}
+                              style={{
+                                padding: '0.3em 0.6em',
+                                fontSize: '0.72em',
+                                backgroundColor: 'rgba(245, 158, 11, 0.26)',
+                                border: '1px solid rgba(245, 158, 11, 0.8)',
+                                color: '#ffffff',
+                                borderRadius: '999px',
+                                cursor: 'pointer'
+                              }}
+                              title="Clear all score data for this player"
+                            >
+                              Clear Data
+                            </button>
                             <button onClick={() => removePlayer(player.id, team.id)} style={{ padding: '0.3em 0.6em', fontSize: '0.8em' }} title="Remove player">×</button>
                           </div>
                         </div>
