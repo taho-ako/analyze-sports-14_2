@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom'
 import TeamCreation from './components/TeamCreation'
 import EnterCodePage from './components/EnterCodePage'
@@ -5,7 +6,26 @@ import Scoring from './components/Scoring'
 import DataView from './components/DataView'
 import './App.css'
 
+
 function App() {
+  const [userRole, setUserRole] = useState(null)
+
+  if (!userRole) {
+    return (
+      <div className="landing-container">
+        <button className="huge-btn host" onClick={() => setUserRole('host')}>
+          Host a Game
+        </button>
+        <button className="huge-btn join" onClick={() => setUserRole('player')}>
+          Join a Game
+        </button>
+      </div>
+    )
+  }
+
+  
+
+  
   return (
     <Router>
       <div className="app">
@@ -33,6 +53,7 @@ function App() {
       </div>
     </Router>
   )
+    
 }
 
 export default App
