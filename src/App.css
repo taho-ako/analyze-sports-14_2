@@ -1,52 +1,259 @@
 #root {
-  max-width: 1280px;
+  max-width: 1500px;
   margin: 0 auto;
-  padding: 2rem;
+  padding: 1rem;
 }
 
 .app {
   text-align: left;
 }
 
+header.app-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  background: linear-gradient(135deg, #001f3f 0%, #0d2a4d 100%);
+  padding: 1rem 1.25rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.uva-logo {
+  display: block;
+  border-radius: 10px;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  width: auto;
+  height: 64px;
+  object-fit: contain;
+  transition: transform 0.2s ease;
+}
+
+.uva-logo:hover {
+  transform: scale(1.05);
+}
+
+header.app-header h1 {
+  color: #ffffff;
+  font-size: 1.9em;
+}
+
 nav {
-  margin-bottom: 2rem;
+  margin-bottom: 1.25rem;
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
 }
 
 nav a {
-  margin-right: 1rem;
+  padding: 0.6rem 1.2rem;
   text-decoration: none;
-  color: #646cff;
+  color: #ffffff;
+  background-color: rgba(79, 163, 255, 0.1);
+  border: 1px solid rgba(79, 163, 255, 0.3);
+  border-radius: 8px;
+  transition: all 0.25s ease;
+  font-weight: 500;
 }
 
 nav a:hover {
-  text-decoration: underline;
+  background-color: rgba(79, 163, 255, 0.2);
+  border-color: rgba(79, 163, 255, 0.6);
+  color: #4fa3ff;
+}
+
+.enter-code-page {
+  text-align: center;
+  max-width: 520px;
+  margin: 0 auto;
+}
+
+.enter-code-subtitle {
+  margin-top: 0.25rem;
+  color: #888;
+}
+
+.enter-code-form {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.enter-code-input {
+  flex: 1;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  border: 1px solid #444;
+  background: #1a1a1a;
+  color: inherit;
+  font-size: 1rem;
+}
+
+.enter-code-input:focus-visible {
+  outline: 4px auto -webkit-focus-ring-color;
+}
+
+.enter-code-button {
+  padding: 0.75rem 1rem;
+}
+
+.enter-code-error {
+  margin-top: 0.75rem;
+  color: #ff6b6b;
 }
 
 .heatmap {
   display: flex;
   gap: 1rem;
-  margin: 1rem 0;
+  margin: 2rem 0;
+  flex-wrap: wrap;
 }
 
 .zone {
   width: 100px;
   height: 100px;
-  border: 1px solid #000;
+  border: 2px solid rgba(255, 255, 255, 0.2);
   cursor: pointer;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  background-color: rgba(0, 102, 204, 0.1);
+}
+
+.zone:hover {
+  border-color: #4fa3ff;
+  background-color: rgba(79, 163, 255, 0.2);
+  transform: scale(1.02);
 }
 
 table {
   width: 100%;
   border-collapse: collapse;
   margin: 1rem 0;
+  background-color: rgba(255, 255, 255, 0.02);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 th, td {
-  border: 1px solid #ddd;
-  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 8px 10px;
   text-align: left;
+  font-size: 0.92rem;
 }
 
 th {
-  background-color: #f2f2f2;
+  background-color: rgba(79, 163, 255, 0.1);
+  font-weight: 600;
+  color: #4fa3ff;
+}
+
+tr:hover {
+  background-color: rgba(79, 163, 255, 0.05);
+}
+
+/* --- Landing Page Styling --- */
+
+/* Overrides the #root padding and max-width to ensure true centering */
+.landing-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 2.5rem;
+  background-color: #0a0e17; /* Dark background to match your theme */
+  z-index: 999; /* Ensures it sits on top of everything */
+}
+
+/* The Huge Buttons */
+.huge-btn {
+  width: 90%;
+  max-width: 650px;
+  padding: 60px 20px;
+  font-size: 3.5rem;
+  font-weight: 700;
+  border-radius: 24px;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.2s ease, filter 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* UVA Orange for Host */
+.huge-btn.host {
+  background-color: #E57200;
+  color: white;
+  box-shadow: 0 10px 30px rgba(229, 114, 0, 0.2);
+}
+
+/* UVA Navy for Join */
+.huge-btn.join {
+  background-color: #232D4B;
+  color: white;
+  border: 3px solid #4fa3ff;
+  box-shadow: 0 10px 30px rgba(35, 45, 75, 0.4);
+}
+
+/* Hover States */
+.huge-btn:hover {
+  transform: scale(1.04);
+  filter: brightness(1.15);
+}
+
+.huge-btn:active {
+  transform: scale(0.98);
+}
+
+/* Optional: Back button in the header once you're inside the app */
+.reset-btn {
+  margin-left: auto;
+  padding: 0.5rem 1rem;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: white;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.reset-btn:hover {
+  background: rgba(255, 44, 44, 0.2);
+  border-color: #ff4444;
+}
+
+/*Waiting Room*/
+.waiting-room {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 60vh;
+  text-align: center;
+}
+
+.waiting-room h2 {
+  font-size: 2rem;
+  color: #ffffff;
+  margin-top: 20px;
+}
+
+.waiting-room p {
+  color: #4fa3ff;
+  font-size: 1.2rem;
+}
+
+/* Bouncing Basketball Animation */
+.loader {
+  font-size: 5rem;
+  animation: bounce 1s infinite alternate;
+}
+
+@keyframes bounce {
+  from { transform: translateY(0); }
+  to { transform: translateY(-30px); }
 }
