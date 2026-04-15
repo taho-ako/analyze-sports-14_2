@@ -225,3 +225,35 @@ tr:hover {
   background: rgba(255, 44, 44, 0.2);
   border-color: #ff4444;
 }
+
+/*Waiting Room*/
+.waiting-room {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 60vh;
+  text-align: center;
+}
+
+.waiting-room h2 {
+  font-size: 2rem;
+  color: #ffffff;
+  margin-top: 20px;
+}
+
+.waiting-room p {
+  color: #4fa3ff;
+  font-size: 1.2rem;
+}
+
+/* Bouncing Basketball Animation */
+.loader {
+  font-size: 5rem;
+  animation: bounce 1s infinite alternate;
+}
+
+@keyframes bounce {
+  from { transform: translateY(0); }
+  to { transform: translateY(-30px); }
+}

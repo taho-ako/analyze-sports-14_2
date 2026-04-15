@@ -36,7 +36,7 @@ const toLocalRestoredShot = (shot, playerId, shotId) => {
   }
 }
 
-function TeamCreation() {
+function TeamCreation({ onStartGame, isGameStarted}) {
   const [teams, setTeams] = useState([])
   const [teamCount, setTeamCount] = useState(4)
   const [playerCount, setPlayerCount] = useState(16)
@@ -413,9 +413,11 @@ function TeamCreation() {
   }
 
   return (
-    <div>
+    <div style={{ position: 'relative', paddingBottom: '100px' }}>
       <h1>Team Creation</h1>
+      
       {!supabase && <p style={{color: 'red'}}>Using local storage - data will not persist after refresh</p>}
+      
       {notification && (
         <div style={{
           position: 'fixed',
@@ -449,6 +451,7 @@ function TeamCreation() {
           </button>
         </div>
       )}
+
       <style>{`
         @keyframes slideDown {
           from {
@@ -493,8 +496,19 @@ function TeamCreation() {
           background-color: #1a2f4f;
           color: #ffffff;
         }
+
+        .start-btn-pulse {
+          animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+          0% { box-shadow: 0 0 0 0 rgba(229, 114, 0, 0.7); }
+          70% { box-shadow: 0 0 0 15px rgba(229, 114, 0, 0); }
+          100% { box-shadow: 0 0 0 0 rgba(229, 114, 0, 0); }
+        }
       `}</style>
       
+      {/* Auto Generation Section */}
       <div style={{ padding: '1.5rem', backgroundColor: 'rgba(79, 163, 255, 0.08)', borderRadius: '8px', border: '1px solid rgba(79, 163, 255, 0.2)', marginBottom: '2rem' }}>
         <h2 style={{marginTop: 0, color: '#ffffff'}}>Auto Generate Teams & Players</h2>
         <p style={{ marginTop: 0, color: 'rgba(255, 255, 255, 0.8)' }}>
@@ -537,18 +551,13 @@ function TeamCreation() {
         <p style={{ marginBottom: 0, marginTop: '0.9rem', color: 'rgba(255, 255, 255, 0.75)' }}>
           Team size preview: {getBalancedRosterPreview().join(' / ')} players per team.
         </p>
-        <p style={{ marginBottom: 0, marginTop: '0.4rem', color: 'rgba(255, 255, 255, 0.6)' }}>
-          Generating replaces current teams and players. You can still move players between teams below for Round 2 adjustments.
-        </p>
       </div>
       
+      {/* Recently Deleted Section */}
       <div style={{ padding: '2rem', backgroundColor: 'rgba(255, 255, 255, 0.03)', borderRadius: '12px', border: '1px solid rgba(79, 163, 255, 0.15)' }}>
         {recentlyDeletedPlayers.length > 0 && (
           <div style={{ marginBottom: '1.5rem', padding: '1rem', backgroundColor: 'rgba(79, 163, 255, 0.08)', borderRadius: '8px', border: '1px solid rgba(79, 163, 255, 0.25)' }}>
             <h3 style={{ marginTop: 0, marginBottom: '0.7rem', color: '#ffffff' }}>Recently Deleted Players</h3>
-            <p style={{ marginTop: 0, marginBottom: '0.8rem', color: 'rgba(255, 255, 255, 0.75)' }}>
-              Bring players back and choose which team they should return to.
-            </p>
             <div style={{ display: 'grid', gap: '0.55rem' }}>
               {recentlyDeletedPlayers.map(deletedPlayer => (
                 <div
@@ -570,9 +579,6 @@ function TeamCreation() {
                     <p style={{ margin: '0.2rem 0 0', color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.82rem' }}>
                       Removed from {deletedPlayer.originalTeamName}
                     </p>
-                    <p style={{ margin: '0.2rem 0 0', color: 'rgba(255, 255, 255, 0.62)', fontSize: '0.76rem' }}>
-                      Saved shots: {deletedPlayer.savedShots?.length || 0}
-                    </p>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
                     <select
@@ -592,15 +598,7 @@ function TeamCreation() {
                     <button
                       onClick={() => restorePlayer(deletedPlayer.deletedKey)}
                       disabled={teams.length === 0}
-                      style={{
-                        padding: '0.35rem 0.7rem',
-                        fontSize: '0.85rem',
-                        backgroundColor: teams.length === 0 ? 'rgba(79, 163, 255, 0.2)' : 'rgba(79, 163, 255, 0.7)',
-                        border: '1px solid rgba(79, 163, 255, 0.8)',
-                        color: '#ffffff',
-                        borderRadius: '6px',
-                        cursor: teams.length === 0 ? 'not-allowed' : 'pointer'
-                      }}
+                      style={{ padding: '0.35rem 0.7rem', fontSize: '0.85rem' }}
                     >
                       Restore
                     </button>
@@ -620,13 +618,7 @@ function TeamCreation() {
               <div key={team.id} style={{ padding: '1.5rem', backgroundColor: 'rgba(79, 163, 255, 0.12)', borderRadius: '8px', border: '1px solid rgba(79, 163, 255, 0.25)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                   <h3 style={{marginTop: 0, marginBottom: 0, color: '#ffffff', fontSize: '1.3em'}}>{team.name}</h3>
-                  <button 
-                    onClick={() => removeTeam(team.id)} 
-                    style={{ padding: '0.3em 0.6em', fontSize: '0.9em', backgroundColor: '#ff4444', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }} 
-                    title="Delete team"
-                  >
-                    Delete
-                  </button>
+                  <button onClick={() => removeTeam(team.id)} style={{ backgroundColor: '#ff4444' }}>Delete</button>
                 </div>
                 {team.players.length === 0 ? (
                   <p style={{ color: 'rgba(255, 255, 255, 0.5)', margin: 0 }}>No players yet</p>
@@ -634,67 +626,18 @@ function TeamCreation() {
                   <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                     {team.players.map(player => (
                       <li key={player.id} style={{ padding: '0.8rem', marginBottom: '0.5rem', backgroundColor: 'rgba(255, 255, 255, 0.08)', borderRadius: '6px', border: '1px solid rgba(79, 163, 255, 0.2)', color: '#ffffff' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
                           <span>{player.name}</span>
                           <div style={{ display: 'flex', gap: '0.35rem' }}>
-                            {teams.length > 1 && (
-                              <button
-                                onClick={() => toggleMoveMenu(player.id)}
-                                style={{
-                                  padding: '0.3em 0.7em',
-                                  fontSize: '0.8em',
-                                  backgroundColor: activeMovePlayerId === player.id ? 'rgba(79, 163, 255, 0.85)' : 'rgba(79, 163, 255, 0.45)',
-                                  border: '1px solid rgba(79, 163, 255, 0.7)',
-                                  color: '#ffffff',
-                                  borderRadius: '999px',
-                                  cursor: 'pointer'
-                                }}
-                                title="Choose a team to move this player"
-                              >
-                                {activeMovePlayerId === player.id ? 'Cancel' : 'Move'}
-                              </button>
-                            )}
-                            <button
-                              onClick={() => clearPlayerData(player.id, player.name)}
-                              style={{
-                                padding: '0.3em 0.6em',
-                                fontSize: '0.72em',
-                                backgroundColor: 'rgba(245, 158, 11, 0.26)',
-                                border: '1px solid rgba(245, 158, 11, 0.8)',
-                                color: '#ffffff',
-                                borderRadius: '999px',
-                                cursor: 'pointer'
-                              }}
-                              title="Clear all score data for this player"
-                            >
-                              Clear Data
-                            </button>
-                            <button onClick={() => removePlayer(player.id, team.id)} style={{ padding: '0.3em 0.6em', fontSize: '0.8em' }} title="Remove player">×</button>
+                            <button onClick={() => toggleMoveMenu(player.id)} style={{ fontSize: '0.8em' }}>Move</button>
+                            <button onClick={() => removePlayer(player.id, team.id)} style={{ fontSize: '0.8em' }}>×</button>
                           </div>
                         </div>
-
-                        {activeMovePlayerId === player.id && teams.length > 1 && (
-                          <div style={{ marginTop: '0.6rem', display: 'flex', flexWrap: 'wrap', gap: '0.35rem', alignItems: 'center' }}>
-                            <span style={{ fontSize: '0.78rem', color: 'rgba(255, 255, 255, 0.85)' }}>Move to:</span>
-                            {teams
-                              .filter(dest => dest.id !== team.id)
-                              .map(dest => (
-                                <button
-                                  key={dest.id}
-                                  onClick={() => handleMoveSelection(player.id, team.id, dest.id)}
-                                  style={{
-                                    padding: '0.3em 0.65em',
-                                    fontSize: '0.8em',
-                                    borderRadius: '999px',
-                                    border: '1px solid rgba(255, 255, 255, 0.3)',
-                                    backgroundColor: 'rgba(255, 255, 255, 0.12)',
-                                    color: '#ffffff',
-                                    cursor: 'pointer'
-                                  }}
-                                >
-                                  {dest.name}
-                                </button>
-                              ))}
+                        {activeMovePlayerId === player.id && (
+                          <div style={{ marginTop: '0.6rem', display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                            {teams.filter(dest => dest.id !== team.id).map(dest => (
+                              <button key={dest.id} onClick={() => handleMoveSelection(player.id, team.id, dest.id)} style={{ fontSize: '0.75em' }}>{dest.name}</button>
+                            ))}
                           </div>
                         )}
                       </li>
@@ -706,8 +649,49 @@ function TeamCreation() {
           )}
         </div>
       </div>
+
+      {/* --- START GAME ACTION BAR --- */}
+      <div style={{
+        position: 'fixed',
+        bottom: '0',
+        left: '0',
+        width: '100%',
+        padding: '25px',
+        background: 'rgba(10, 14, 23, 0.98)',
+        borderTop: '2px solid rgba(79, 163, 255, 0.3)',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        boxShadow: '0 -15px 35px rgba(0,0,0,0.6)',
+        zIndex: 100
+      }}>
+        <button
+          onClick={onStartGame}
+          disabled={teams.length === 0}
+          className={!isGameStarted && teams.length > 0 ? 'start-btn-pulse' : ''}
+          style={{
+            padding: '1.25rem 4rem',
+            fontSize: '1.6rem',
+            fontWeight: '900',
+            backgroundColor: isGameStarted ? '#28a745' : '#E57200',
+            color: 'white',
+            border: 'none',
+            borderRadius: '16px',
+            cursor: teams.length === 0 ? 'not-allowed' : 'pointer',
+            transition: 'all 0.3s ease',
+            textTransform: 'uppercase',
+            letterSpacing: '1px',
+            opacity: teams.length === 0 ? 0.5 : 1
+          }}
+        >
+          {isGameStarted ? '✓ Game is Live' : 'Start Game for All Players'}
+        </button>
+      </div>
+
+      {/* Spacing element so footer doesn't cover content */}
+      <div style={{ height: '120px' }}></div>
     </div>
-  )
+  );
 }
 
 export default TeamCreation
