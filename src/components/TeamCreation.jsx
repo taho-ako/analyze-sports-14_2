@@ -104,6 +104,28 @@ function TeamCreation({ onStartGame, isGameStarted}) {
     return () => window.removeEventListener('beforeunload', handleUnload)
   }, [fetchTeams])
 
+  useEffect(() => {
+    if (!supabase) return undefined
+
+    const channel = supabase
+      .channel('team-creation-sync')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'teams' },
+        () => fetchTeams()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'players' },
+        () => fetchTeams()
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [fetchTeams])
+
   const generateTeamsAndPlayers = async () => {
     const safeTeamCount = Number(teamCount)
     const safePlayerCount = Number(playerCount)

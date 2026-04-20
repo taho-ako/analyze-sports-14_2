@@ -5,8 +5,8 @@ import HeatmapCourt from './HeatmapCourt'
 
 function Scoring() {
   const [teams, setTeams] = useState([])
-  const [selectedTeam, setSelectedTeam] = useState(null)
-  const [selectedPlayer, setSelectedPlayer] = useState(null)
+  const [selectedTeamId, setSelectedTeamId] = useState(null)
+  const [selectedPlayerId, setSelectedPlayerId] = useState(null)
   const [currentRound, setCurrentRound] = useState(1)
   const [warningMessage, setWarningMessage] = useState('')
   const [zoneStats, setZoneStats] = useState({})
@@ -14,6 +14,8 @@ function Scoring() {
   const [particles, setParticles] = useState([])
   const [shots, setShots] = useState([])
   const recordShotRef = useRef(null)
+  const selectedTeam = teams.find(team => String(team.id) === String(selectedTeamId)) || null
+  const selectedPlayer = selectedTeam?.players.find(player => String(player.id) === String(selectedPlayerId)) || null
 
   const fetchTeams = useCallback(async () => {
     if (supabase) {
@@ -30,24 +32,22 @@ function Scoring() {
     fetchTeams()
   }, [fetchTeams])
 
-  const handleTeamSelect = (teamId) => {
-    const team = teams.find(t => t.id == teamId)
-    setSelectedTeam(team)
-    setSelectedPlayer(null)
-    setZoneStats({})
-  }
+  useEffect(() => {
+    if (selectedTeamId && !selectedTeam) {
+      setSelectedTeamId(null)
+      setSelectedPlayerId(null)
+      setZoneStats({})
+      setShots([])
+    }
+  }, [selectedTeam, selectedTeamId])
 
-  const handlePlayerSelect = (playerId) => {
-    const player = selectedTeam?.players.find(p => p.id == playerId)
-    setSelectedPlayer(player)
-    fetchZoneStats(player)
-  }
-
-  const handleRoundSelect = (round) => {
-    setCurrentRound(round)
-    setZoneStats({})
-    setShots([])
-  }
+  useEffect(() => {
+    if (selectedPlayerId && !selectedPlayer) {
+      setSelectedPlayerId(null)
+      setZoneStats({})
+      setShots([])
+    }
+  }, [selectedPlayer, selectedPlayerId])
 
   const fetchZoneStats = useCallback(async (player) => {
     if (!player) return
@@ -83,6 +83,56 @@ function Scoring() {
       setZoneStats(stats)
     }
   }, [currentRound])
+
+  useEffect(() => {
+    if (!supabase) return undefined
+
+    const channel = supabase
+      .channel('scoring-sync')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'teams' },
+        () => fetchTeams()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'players' },
+        () => fetchTeams()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'shots' },
+        () => {
+          if (selectedPlayer) {
+            fetchZoneStats(selectedPlayer)
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [fetchTeams, fetchZoneStats, selectedPlayer])
+
+  const handleTeamSelect = (teamId) => {
+    setSelectedTeamId(teamId)
+    setSelectedPlayerId(null)
+    setZoneStats({})
+    setShots([])
+  }
+
+  const handlePlayerSelect = (playerId) => {
+    const player = selectedTeam?.players.find(p => p.id == playerId)
+    setSelectedPlayerId(playerId)
+    fetchZoneStats(player)
+  }
+
+  const handleRoundSelect = (round) => {
+    setCurrentRound(round)
+    setZoneStats({})
+    setShots([])
+  }
 
   useEffect(() => {
     if (selectedPlayer) {
@@ -355,9 +405,9 @@ function Scoring() {
                   fontSize: '14px',
                   fontWeight: 'bold',
                   border: '2px solid',
-                  borderColor: selectedTeam?.id === team.id ? '#3b82f6' : '#d1d5db',
-                  backgroundColor: selectedTeam?.id === team.id ? '#dbeafe' : 'white',
-                  color: selectedTeam?.id === team.id ? '#1e40af' : '#374151',
+                  borderColor: String(selectedTeamId) === String(team.id) ? '#3b82f6' : '#d1d5db',
+                  backgroundColor: String(selectedTeamId) === String(team.id) ? '#dbeafe' : 'white',
+                  color: String(selectedTeamId) === String(team.id) ? '#1e40af' : '#374151',
                   borderRadius: '6px',
                   cursor: 'pointer',
                   transition: 'all 0.2s'
@@ -383,9 +433,9 @@ function Scoring() {
                     fontSize: '14px',
                     fontWeight: 'bold',
                     border: '2px solid',
-                    borderColor: selectedPlayer?.id === player.id ? '#ec4899' : '#d1d5db',
-                    backgroundColor: selectedPlayer?.id === player.id ? '#fce7f3' : 'white',
-                    color: selectedPlayer?.id === player.id ? '#be185d' : '#374151',
+                    borderColor: String(selectedPlayerId) === String(player.id) ? '#ec4899' : '#d1d5db',
+                    backgroundColor: String(selectedPlayerId) === String(player.id) ? '#fce7f3' : 'white',
+                    color: String(selectedPlayerId) === String(player.id) ? '#be185d' : '#374151',
                     borderRadius: '6px',
                     cursor: 'pointer',
                     transition: 'all 0.2s'

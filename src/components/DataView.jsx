@@ -106,6 +106,33 @@ function DataView() {
   }, [fetchData])
 
   useEffect(() => {
+    if (!supabase) return undefined
+
+    const channel = supabase
+      .channel('data-view-sync')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'teams' },
+        () => fetchData()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'players' },
+        () => fetchData()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'shots' },
+        () => fetchData()
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [fetchData])
+
+  useEffect(() => {
     setSelectedTeam(null)
     setSelectedPlayerId(null)
     setShowFullLeaderboard(false)
