@@ -6,14 +6,31 @@ import Scoring from './components/Scoring'
 import DataView from './components/DataView'
 import './App.css'
 
+const HOST_PASSWORD = 'basketball'
+
 function App() {
   const [userRole, setUserRole] = useState(null)
   const [isGameStarted, setIsGameStarted] = useState(false) // Tracking the game status
 
+  const handleHostSelection = () => {
+    const enteredPassword = window.prompt('Enter host password')
+
+    if (enteredPassword === null) {
+      return
+    }
+
+    if (enteredPassword.trim() !== HOST_PASSWORD) {
+      window.alert('Incorrect host password')
+      return
+    }
+
+    setUserRole('host')
+  }
+
   if (!userRole) {
     return (
       <div className="landing-container">
-        <button className="huge-btn host" onClick={() => setUserRole('host')}>
+        <button className="huge-btn host" onClick={handleHostSelection}>
           Host a Game
         </button>
         <button className="huge-btn join" onClick={() => setUserRole('player')}>
