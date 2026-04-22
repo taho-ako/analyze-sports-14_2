@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 
-function Scoreboard({ canRestart = false, onRestartGame }) {
+function Scoreboard({ canRestart = false, onRestartGame, highlightTeamId = null }) {
   const [teamResults, setTeamResults] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -117,24 +117,39 @@ function Scoreboard({ canRestart = false, onRestartGame }) {
         {teamResults.length === 0 ? (
           <p style={{ margin: 0, padding: '1rem', color: 'rgba(255, 255, 255, 0.8)' }}>No team results available.</p>
         ) : (
-          teamResults.map((team, index) => (
-            <div
-              key={team.id}
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '70px 1fr auto',
-                alignItems: 'center',
-                gap: '0.7rem',
-                padding: '0.8rem 1rem',
-                borderBottom: index === teamResults.length - 1 ? 'none' : '1px solid rgba(79, 163, 255, 0.2)',
-                backgroundColor: index === 0 ? 'rgba(37, 99, 235, 0.22)' : 'transparent'
-              }}
-            >
-              <span style={{ color: '#93c5fd', fontWeight: 800 }}>#{index + 1}</span>
-              <span style={{ color: '#ffffff', fontWeight: 700 }}>{team.name}</span>
-              <span style={{ color: '#ffffff', fontWeight: 800 }}>{team.totalPoints} pts</span>
-            </div>
-          ))
+          teamResults.map((team, index) => {
+            const isHighlightedTeam = String(highlightTeamId) === String(team.id)
+
+            return (
+              <div
+                key={team.id}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '70px 1fr auto',
+                  alignItems: 'center',
+                  gap: '0.7rem',
+                  padding: '0.8rem 1rem',
+                  borderBottom: index === teamResults.length - 1 ? 'none' : '1px solid rgba(79, 163, 255, 0.2)',
+                  backgroundColor: isHighlightedTeam
+                    ? 'rgba(34, 197, 94, 0.24)'
+                    : (index === 0 ? 'rgba(37, 99, 235, 0.22)' : 'transparent'),
+                  outline: isHighlightedTeam ? '2px solid rgba(34, 197, 94, 0.75)' : 'none',
+                  outlineOffset: isHighlightedTeam ? '-2px' : '0'
+                }}
+              >
+                <span style={{ color: '#93c5fd', fontWeight: 800 }}>#{index + 1}</span>
+                <span style={{ color: '#ffffff', fontWeight: 700 }}>
+                  {team.name}
+                  {isHighlightedTeam && (
+                    <span style={{ marginLeft: '0.4rem', color: '#bbf7d0', fontWeight: 800 }}>
+                      (Your Team)
+                    </span>
+                  )}
+                </span>
+                <span style={{ color: '#ffffff', fontWeight: 800 }}>{team.totalPoints} pts</span>
+              </div>
+            )
+          })
         )}
       </div>
 

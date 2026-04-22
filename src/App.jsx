@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate, Link } from 'react-router-dom'
 import { supabase } from './supabaseClient'
 import TeamCreation from './components/TeamCreation'
@@ -181,14 +181,16 @@ function App() {
   const [hostClaim, setHostClaim] = useState(null)
   const [claimedTeamId, setClaimedTeamId] = useState(null)
   const [hostLockMessage, setHostLockMessage] = useState('')
+  const [teamResortNotice, setTeamResortNotice] = useState(null)
   const hasSupabase = Boolean(supabase)
   const [clientId] = useState(() => getOrCreateClientId())
+  const previousClaimedTeamRosterRef = useRef(null)
 
   const refreshTeams = useCallback(async () => {
     if (hasSupabase) {
       const { data, error } = await supabase
         .from('teams')
-        .select('id, name')
+        .select('id, name, players(id, name)')
         .order('id', { ascending: true })
 
       if (error) {
@@ -383,6 +385,36 @@ function App() {
       localStorage.removeItem(LOCAL_CLAIMED_TEAM_KEY)
     }
   }, [claimedTeamId, teams])
+
+  useEffect(() => {
+    if (userRole !== 'player' || !claimedTeamId) return
+
+    const claimedTeam = teams.find(team => String(team.id) === String(claimedTeamId))
+    if (!claimedTeam) return
+
+    const rosterNames = [...(claimedTeam.players || [])]
+      .map(player => String(player.name))
+      .sort((left, right) => left.localeCompare(right))
+    const rosterSignature = `${claimedTeam.id}:${rosterNames.join('|')}`
+
+    if (!previousClaimedTeamRosterRef.current) {
+      previousClaimedTeamRosterRef.current = rosterSignature
+      return
+    }
+
+    if (previousClaimedTeamRosterRef.current !== rosterSignature && currentRound >= GAME_PHASES.ROUND_1_ENDED) {
+      setTeamResortNotice({
+        teamName: claimedTeam.name,
+        players: rosterNames
+      })
+    }
+
+    previousClaimedTeamRosterRef.current = rosterSignature
+  }, [claimedTeamId, currentRound, teams, userRole])
+
+  useEffect(() => {
+    previousClaimedTeamRosterRef.current = null
+  }, [claimedTeamId])
 
   useEffect(() => {
     if (userRole !== 'player' || !claimedTeamId) return
@@ -953,10 +985,61 @@ function App() {
               <Scoreboard
                 canRestart={userRole === 'host' && currentRound === GAME_PHASES.ROUND_2_ENDED}
                 onRestartGame={handleRestartAfterFinal}
+                highlightTeamId={userRole === 'player' ? claimedTeamId : null}
               />
             }
           />
         </Routes>
+
+        {userRole === 'player' && teamResortNotice && (
+          <div style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.65)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 4000,
+            padding: '1rem'
+          }}>
+            <div style={{
+              width: '100%',
+              maxWidth: '520px',
+              backgroundColor: '#0f172a',
+              border: '1px solid rgba(79, 163, 255, 0.5)',
+              borderRadius: '14px',
+              padding: '1rem 1.1rem'
+            }}>
+              <h2 style={{ margin: 0, color: '#ffffff' }}>Team Update</h2>
+              <p style={{ marginTop: '0.45rem', color: 'rgba(255, 255, 255, 0.82)' }}>
+                Your device is assigned to <strong>{teamResortNotice.teamName}</strong>. Updated players:
+              </p>
+              <ul style={{ margin: '0.35rem 0 0.8rem', paddingLeft: '1.1rem', color: '#e2e8f0' }}>
+                {teamResortNotice.players.length === 0 ? (
+                  <li>No players assigned yet.</li>
+                ) : (
+                  teamResortNotice.players.map(playerName => (
+                    <li key={`resort-${playerName}`}>{playerName}</li>
+                  ))
+                )}
+              </ul>
+              <button
+                onClick={() => setTeamResortNotice(null)}
+                style={{
+                  padding: '0.55rem 0.9rem',
+                  border: 'none',
+                  borderRadius: '8px',
+                  backgroundColor: '#2563eb',
+                  color: '#ffffff',
+                  fontWeight: 700,
+                  cursor: 'pointer'
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </Router>
   )
