@@ -24,7 +24,7 @@ A web application for tracking sports teams, players, and scoring with data visu
 3. Set up Supabase:
    - Create a new Supabase project
    - Run the SQL in `database-schema.sql` to create tables
-   - If your `shots` table already exists, run this migration:
+    - If your `shots` table already exists, run this migration:
      ```sql
      ALTER TABLE shots ADD COLUMN IF NOT EXISTS round INTEGER NOT NULL DEFAULT 1;
      ```
@@ -32,6 +32,15 @@ A web application for tracking sports teams, players, and scoring with data visu
        ```sql
        CREATE TABLE IF NOT EXISTS team_claims (
           team_id INTEGER PRIMARY KEY REFERENCES teams(id) ON DELETE CASCADE,
+          client_id TEXT NOT NULL,
+          claimed_at TIMESTAMP NOT NULL DEFAULT NOW(),
+          last_active_at TIMESTAMP NOT NULL DEFAULT NOW()
+       );
+       ```
+    - Run this migration for single active host locking:
+       ```sql
+       CREATE TABLE IF NOT EXISTS host_claims (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
           client_id TEXT NOT NULL,
           claimed_at TIMESTAMP NOT NULL DEFAULT NOW(),
           last_active_at TIMESTAMP NOT NULL DEFAULT NOW()

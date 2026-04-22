@@ -31,3 +31,11 @@ CREATE TABLE team_claims (
   claimed_at TIMESTAMP NOT NULL DEFAULT NOW(),
   last_active_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
+
+-- Create host_claims table (single active host instance)
+CREATE TABLE host_claims (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  client_id TEXT NOT NULL,
+  claimed_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  last_active_at TIMESTAMP NOT NULL DEFAULT NOW()
+);

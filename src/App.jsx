@@ -20,6 +20,7 @@ const LOCAL_GAME_PHASE_KEY = 'local_game_phase'
 const LOCAL_TEAM_CLAIMS_KEY = 'local_team_claims'
 const LOCAL_CLIENT_ID_KEY = 'hooplytics_client_id'
 const LOCAL_CLAIMED_TEAM_KEY = 'hooplytics_claimed_team_id'
+const LOCAL_HOST_CLAIM_KEY = 'hooplytics_host_claim'
 
 const getRoundLabel = (phase) => {
   if (phase === GAME_PHASES.ROUND_1_LIVE) return 'Round 1 is live'
@@ -68,6 +69,27 @@ const readLocalClaims = () => {
 
 const writeLocalClaims = (claims) => {
   localStorage.setItem(LOCAL_TEAM_CLAIMS_KEY, JSON.stringify(claims))
+}
+
+const readLocalHostClaim = () => {
+  const raw = localStorage.getItem(LOCAL_HOST_CLAIM_KEY)
+  if (!raw) return null
+
+  try {
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+const writeLocalHostClaim = (claim) => {
+  if (!claim) {
+    localStorage.removeItem(LOCAL_HOST_CLAIM_KEY)
+    return
+  }
+
+  localStorage.setItem(LOCAL_HOST_CLAIM_KEY, JSON.stringify(claim))
 }
 
 const getOrCreateClientId = () => {
@@ -156,7 +178,9 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [teams, setTeams] = useState([])
   const [teamClaims, setTeamClaims] = useState([])
+  const [hostClaim, setHostClaim] = useState(null)
   const [claimedTeamId, setClaimedTeamId] = useState(null)
+  const [hostLockMessage, setHostLockMessage] = useState('')
   const hasSupabase = Boolean(supabase)
   const [clientId] = useState(() => getOrCreateClientId())
 
@@ -217,6 +241,46 @@ function App() {
     return activeClaims
   }, [hasSupabase])
 
+  const refreshHostClaim = useCallback(async () => {
+    if (hasSupabase) {
+      const { data, error } = await supabase
+        .from('host_claims')
+        .select('id, client_id, claimed_at, last_active_at')
+        .eq('id', 1)
+        .maybeSingle()
+
+      if (error) {
+        console.error('Error loading host claim:', error)
+        setHostClaim(null)
+        return null
+      }
+
+      if (!data) {
+        setHostClaim(null)
+        return null
+      }
+
+      if (!isClaimActive(data)) {
+        await supabase.from('host_claims').delete().eq('id', 1)
+        setHostClaim(null)
+        return null
+      }
+
+      setHostClaim(data)
+      return data
+    }
+
+    const localHostClaim = readLocalHostClaim()
+    if (!localHostClaim || !isClaimActive(localHostClaim)) {
+      writeLocalHostClaim(null)
+      setHostClaim(null)
+      return null
+    }
+
+    setHostClaim(localHostClaim)
+    return localHostClaim
+  }, [hasSupabase])
+
   useEffect(() => {
     if (!hasSupabase) {
       const storedPhase = Number(localStorage.getItem(LOCAL_GAME_PHASE_KEY))
@@ -236,6 +300,10 @@ function App() {
 
         if (event.key === LOCAL_TEAM_CLAIMS_KEY) {
           refreshClaims()
+        }
+
+        if (event.key === LOCAL_HOST_CLAIM_KEY) {
+          refreshHostClaim()
         }
 
         if (event.key === 'teams') {
@@ -273,21 +341,23 @@ function App() {
       .subscribe()
 
     return () => supabase.removeChannel(channel)
-  }, [hasSupabase, refreshClaims, refreshTeams])
+  }, [hasSupabase, refreshClaims, refreshHostClaim, refreshTeams])
 
   useEffect(() => {
     refreshTeams()
     refreshClaims()
-  }, [refreshTeams, refreshClaims])
+    refreshHostClaim()
+  }, [refreshTeams, refreshClaims, refreshHostClaim])
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
       refreshTeams()
       refreshClaims()
+      refreshHostClaim()
     }, 15000)
 
     return () => window.clearInterval(intervalId)
-  }, [refreshClaims, refreshTeams])
+  }, [refreshClaims, refreshHostClaim, refreshTeams])
 
   useEffect(() => {
     if (!hasSupabase) return undefined
@@ -296,12 +366,13 @@ function App() {
       .channel('team-claim-sync')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'teams' }, () => refreshTeams())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'team_claims' }, () => refreshClaims())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'host_claims' }, () => refreshHostClaim())
       .subscribe()
 
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [hasSupabase, refreshClaims, refreshTeams])
+  }, [hasSupabase, refreshClaims, refreshHostClaim, refreshTeams])
 
   useEffect(() => {
     if (!claimedTeamId) return
@@ -327,6 +398,15 @@ function App() {
       localStorage.removeItem(LOCAL_CLAIMED_TEAM_KEY)
     }
   }, [claimedTeamId, clientId, teamClaims, userRole])
+
+  useEffect(() => {
+    if (userRole !== 'host') return
+
+    if (hostClaim && hostClaim.client_id !== clientId && isClaimActive(hostClaim)) {
+      setUserRole(null)
+      setHostLockMessage('Host controls were claimed by another active device.')
+    }
+  }, [clientId, hostClaim, userRole])
 
   useEffect(() => {
     if (userRole !== 'player') return
@@ -466,6 +546,82 @@ function App() {
 
     await refreshClaims()
   }
+
+  const claimHostRole = async () => {
+    const currentClaim = await refreshHostClaim()
+    if (currentClaim && currentClaim.client_id !== clientId && isClaimActive(currentClaim)) {
+      setHostLockMessage('Host controls are already open on another active device.')
+      return false
+    }
+
+    const claimPayload = {
+      id: 1,
+      client_id: clientId,
+      claimed_at: nowIso(),
+      last_active_at: nowIso()
+    }
+
+    if (hasSupabase) {
+      const { error } = await supabase
+        .from('host_claims')
+        .upsert([claimPayload], { onConflict: 'id' })
+
+      if (error) {
+        console.error('Error claiming host role:', error)
+        setHostLockMessage('Could not claim host role. Ensure host_claims table exists.')
+        return false
+      }
+    } else {
+      writeLocalHostClaim(claimPayload)
+    }
+
+    setHostLockMessage('')
+    setHostClaim(claimPayload)
+    return true
+  }
+
+  const releaseHostRole = async () => {
+    if (hasSupabase) {
+      await supabase
+        .from('host_claims')
+        .delete()
+        .eq('id', 1)
+        .eq('client_id', clientId)
+    } else {
+      const localClaim = readLocalHostClaim()
+      if (localClaim?.client_id === clientId) {
+        writeLocalHostClaim(null)
+      }
+    }
+
+    await refreshHostClaim()
+  }
+
+  useEffect(() => {
+    if (userRole !== 'host') return undefined
+
+    const heartbeat = async () => {
+      if (hasSupabase) {
+        await supabase
+          .from('host_claims')
+          .update({ last_active_at: nowIso() })
+          .eq('id', 1)
+          .eq('client_id', clientId)
+      } else {
+        const localClaim = readLocalHostClaim()
+        if (localClaim?.client_id === clientId) {
+          writeLocalHostClaim({ ...localClaim, last_active_at: nowIso() })
+        }
+      }
+
+      refreshHostClaim()
+    }
+
+    heartbeat()
+    const intervalId = window.setInterval(heartbeat, 60 * 1000)
+
+    return () => window.clearInterval(intervalId)
+  }, [clientId, hasSupabase, refreshHostClaim, userRole])
 
   const updateGamePhase = async (nextPhase) => {
     if (!hasSupabase) {
@@ -649,13 +805,33 @@ function App() {
     await updateGamePhase(GAME_PHASES.PRE_GAME)
   }
 
+  const handleSelectHostRole = async () => {
+    const claimed = await claimHostRole()
+    if (claimed) {
+      setUserRole('host')
+    }
+  }
+
+  const handleReturnToLanding = async () => {
+    if (userRole === 'host') {
+      await releaseHostRole()
+    }
+
+    setUserRole(null)
+  }
+
   if (loading) return <div className="loading">Connecting...</div>
 
   if (!userRole) {
     return (
       <div className="landing-container">
-        <button className="huge-btn host" onClick={() => setUserRole('host')}>Host a Game</button>
+        <button className="huge-btn host" onClick={handleSelectHostRole}>Host a Game</button>
         <button className="huge-btn join" onClick={() => setUserRole('player')}>Join a Game</button>
+        {hostLockMessage && (
+          <p style={{ marginTop: '0.4rem', color: '#fecaca', fontWeight: 700 }}>
+            {hostLockMessage}
+          </p>
+        )}
       </div>
     )
   }
@@ -711,7 +887,7 @@ function App() {
         )}
         <header className="app-header">
           <img className="uva-logo" src="uva logo.png" alt="UVA logo" width="64" />
-          <h1 onClick={() => { setUserRole(null) }} style={{ cursor: 'pointer' }}>Hooplytics</h1>
+          <h1 onClick={handleReturnToLanding} style={{ cursor: 'pointer' }}>Hooplytics</h1>
           {userRole === 'player' && claimedTeamName && (
             <p style={{ marginLeft: 'auto', marginRight: '0.8rem', color: '#86efac', fontWeight: 700 }}>
               Your Team: {claimedTeamName}
