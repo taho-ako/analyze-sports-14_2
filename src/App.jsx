@@ -929,15 +929,17 @@ function App() {
 
   const isRoundLive = currentRound === GAME_PHASES.ROUND_1_LIVE || currentRound === GAME_PHASES.ROUND_2_LIVE
   const activeScoringRound = currentRound === GAME_PHASES.ROUND_2_LIVE ? 2 : 1
-  const claimedTeamName = teams.find(team => String(team.id) === String(claimedTeamId))?.name || null
+  const activeOwnClaim = teamClaims.find(claim => claim.client_id === clientId && isClaimActive(claim))
+  const effectiveClaimedTeamId = claimedTeamId ?? activeOwnClaim?.team_id ?? null
+  const claimedTeamName = teams.find(team => String(team.id) === String(effectiveClaimedTeamId))?.name || null
 
   const renderPlayerHome = () => {
-    if (!claimedTeamId) {
+    if (!effectiveClaimedTeamId) {
       return (
         <TeamJoinPanel
           teams={teams}
           claims={teamClaims}
-          claimedTeamId={claimedTeamId}
+          claimedTeamId={effectiveClaimedTeamId}
           onClaimTeam={claimTeam}
         />
       )
@@ -1029,8 +1031,8 @@ function App() {
                   userRole === 'host'
                     ? <Scoring lockedRound={activeScoringRound} roundLocked={true} isHost={true} />
                     : (
-                      claimedTeamId
-                        ? <Scoring lockedRound={activeScoringRound} roundLocked={true} isHost={false} claimedTeamId={claimedTeamId} />
+                      effectiveClaimedTeamId
+                        ? <Scoring lockedRound={activeScoringRound} roundLocked={true} isHost={false} claimedTeamId={effectiveClaimedTeamId} />
                         : <Navigate to="/" />
                     )
                 )
@@ -1044,7 +1046,7 @@ function App() {
               <Scoreboard
                 canRestart={userRole === 'host' && currentRound === GAME_PHASES.ROUND_2_ENDED}
                 onRestartGame={handleRestartAfterFinal}
-                highlightTeamId={userRole === 'player' ? claimedTeamId : null}
+                highlightTeamId={userRole === 'player' ? effectiveClaimedTeamId : null}
               />
             }
           />
