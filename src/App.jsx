@@ -11,8 +11,14 @@ function App() {
   const [gameId, setGameId] = useState('34583d69-c4ea-4aa5-b208-612cc6a0a581');
   const [currentRound, setCurrentRound] = useState(0)
   const [loading, setLoading] = useState(true)
+  const hasSupabase = Boolean(supabase)
 
   useEffect(() => {
+    if (!hasSupabase) {
+      setLoading(false)
+      return undefined
+    }
+
     // 1. Fetch initial row to get the ID and current round
     const fetchGame = async () => {
       const { data, error } = await supabase
@@ -40,10 +46,15 @@ function App() {
       ).subscribe()
 
     return () => supabase.removeChannel(channel)
-  }, [])
+  }, [hasSupabase])
 
   // 3. Helper to start the game (Moves to round 1 using the stored gameId)
   const handleStartGame = async () => {
+    if (!hasSupabase) {
+      setCurrentRound(1)
+      return
+    }
+
     if (!gameId) return alert("Game ID not found!");
 
     const { error } = await supabase
@@ -70,6 +81,11 @@ function App() {
   return (
     <Router>
       <div className="app">
+        {!hasSupabase && (
+          <p style={{ color: 'red', textAlign: 'center', margin: '8px 0' }}>
+            Missing Supabase environment variables. Running with local-only behavior.
+          </p>
+        )}
         <header className="app-header">
           <img className="uva-logo" src="uva logo.png" alt="UVA logo" width="64" />
           <h1 onClick={() => {setUserRole(null);}} style={{cursor: 'pointer'}}>Hooplytics</h1>
