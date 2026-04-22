@@ -133,11 +133,19 @@ function DataView() {
   }, [fetchData])
 
   useEffect(() => {
-    setSelectedTeam(null)
     setSelectedPlayerId(null)
     setShowFullLeaderboard(false)
     setHoveredZonePlayerKey(null)
   }, [selectedRound])
+
+  useEffect(() => {
+    if (!selectedTeam || selectedPlayerId === null) return
+
+    const selectedPlayer = playerStats.find(player => player.id === selectedPlayerId)
+    if (!selectedPlayer || selectedPlayer.team !== selectedTeam.name) {
+      setSelectedPlayerId(null)
+    }
+  }, [playerStats, selectedPlayerId, selectedTeam])
 
   const COLORS = [
     '#2563eb', '#ef4444', '#22c55e', '#f59e0b', '#a855f7', '#06b6d4',
@@ -246,9 +254,12 @@ function DataView() {
       }))
   }
 
+  const teamFilteredStats = selectedTeam
+    ? playerStats.filter(player => player.team === selectedTeam.name)
+    : playerStats
   const filteredPlayerStats = selectedRound === 1
-    ? (selectedPlayerId ? playerStats.filter(player => player.id === selectedPlayerId) : playerStats)
-    : (selectedTeam ? playerStats.filter(player => player.team === selectedTeam.name) : playerStats)
+    ? (selectedPlayerId ? teamFilteredStats.filter(player => player.id === selectedPlayerId) : teamFilteredStats)
+    : teamFilteredStats
   const finalTeamStats = selectedRound === 2
     ? (selectedTeam ? teamStats.filter(team => team.name === selectedTeam.name) : teamStats)
     : []
@@ -260,7 +271,7 @@ function DataView() {
     name: team.name,
     points: team.totalPoints
   }))
-  const roundOneLeaderboard = getRoundOneLeaderboard(playerStats)
+  const roundOneLeaderboard = getRoundOneLeaderboard(teamFilteredStats)
   const leaderboardPreviewCount = 6
   const visibleRoundOneLeaderboard = showFullLeaderboard
     ? roundOneLeaderboard
@@ -287,7 +298,7 @@ function DataView() {
     ? playerStats.find(player => player.id === selectedPlayerId)
     : null
   const heatmapScopeLabel = selectedRound === 1
-    ? (selectedRoundOnePlayer ? selectedRoundOnePlayer.name : 'All Players')
+    ? (selectedRoundOnePlayer ? selectedRoundOnePlayer.name : (selectedTeam ? `${selectedTeam.name} Players` : 'All Players'))
     : (selectedTeam ? selectedTeam.name : 'All Teams')
 
   const renderZoneMadeTooltip = ({ active, payload, label }) => {
@@ -437,6 +448,43 @@ function DataView() {
       {/* Round Filter Selection */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1rem', marginBottom: '1rem' }}>
         <div style={{ padding: '1rem', backgroundColor: 'rgba(79, 163, 255, 0.08)', borderRadius: '8px', border: '1px solid rgba(79, 163, 255, 0.2)' }}>
+          <h2 style={{marginTop: 0, color: '#ffffff'}}>Team Data Focus (All Rounds)</h2>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1rem' }}>
+            <button
+              onClick={() => setSelectedTeam(null)}
+              style={{
+                padding: '0.45em 0.8em',
+                backgroundColor: selectedTeam === null ? '#0066cc' : 'rgba(0, 102, 204, 0.5)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                fontWeight: selectedTeam === null ? '600' : '500'
+              }}
+            >
+              All Teams
+            </button>
+            {teams.map(team => (
+              <button
+                key={`team-focus-${team.id}`}
+                onClick={() => setSelectedTeam(team)}
+                style={{
+                  padding: '0.45em 0.8em',
+                  backgroundColor: selectedTeam?.id === team.id ? '#0066cc' : 'rgba(0, 102, 204, 0.5)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  fontWeight: selectedTeam?.id === team.id ? '600' : '500'
+                }}
+              >
+                {team.name}
+              </button>
+            ))}
+          </div>
+
           {selectedRound === 1 ? (
             <>
               <h2 style={{marginTop: 0, color: '#ffffff'}}>Select Player (Round 1)</h2>
@@ -479,6 +527,9 @@ function DataView() {
           ) : (
             <>
               <h2 style={{marginTop: 0, color: '#ffffff'}}>Select Team (Round 2)</h2>
+              <p style={{ marginTop: 0, color: 'rgba(255, 255, 255, 0.75)' }}>
+                Team focus above controls which team data you are inspecting.
+              </p>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
                 <button 
                   onClick={() => setSelectedTeam(null)}
