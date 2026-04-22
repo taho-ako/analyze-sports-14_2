@@ -49,8 +49,12 @@ function TeamCreation({
   onEndRoundOne,
   onStartRoundTwo,
   onEndRoundTwo,
-  onEndGameAnytime
+  onEndGameAnytime,
+  teamClaims = [],
+  onReleaseTeamClaim,
+  onTeamsRegenerated
 }) {
+  const canGenerateTeams = currentRound === GAME_PHASES.PRE_GAME
   const [teams, setTeams] = useState([])
   const [teamCount, setTeamCount] = useState(4)
   const [playerCount, setPlayerCount] = useState(16)
@@ -148,8 +152,8 @@ function TeamCreation({
       return showNotification('Choose between 1 and 4 teams')
     }
 
-    if (!Number.isInteger(safePlayerCount) || safePlayerCount < 1 || safePlayerCount > 18) {
-      return showNotification('Players must be between 1 and 18')
+    if (!Number.isInteger(safePlayerCount) || safePlayerCount < 1 || safePlayerCount > 16) {
+      return showNotification('Players must be between 1 and 16')
     }
 
     const generatedTeamNames = getGeneratedTeamNames(safeTeamCount)
@@ -203,6 +207,10 @@ function TeamCreation({
         localStorage.setItem('teams', JSON.stringify(generatedTeams))
         localStorage.setItem('shots', JSON.stringify([]))
         setTeams(generatedTeams)
+      }
+
+      if (onTeamsRegenerated) {
+        await onTeamsRegenerated()
       }
 
       setRecentlyDeletedPlayers([])
@@ -544,50 +552,51 @@ function TeamCreation({
         }
       `}</style>
       
-      {/* Auto Generation Section */}
-      <div style={{ padding: '1.5rem', backgroundColor: 'rgba(79, 163, 255, 0.08)', borderRadius: '8px', border: '1px solid rgba(79, 163, 255, 0.2)', marginBottom: '2rem' }}>
-        <h2 style={{marginTop: 0, color: '#ffffff'}}>Auto Generate Teams & Players</h2>
-        <p style={{ marginTop: 0, color: 'rgba(255, 255, 255, 0.8)' }}>
-          Select how many teams and players you want, then generate balanced rosters automatically.
-        </p>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.8rem', alignItems: 'end' }}>
-          <label style={{ color: '#ffffff', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-            Teams
-            <select
-              value={teamCount}
-              onChange={(e) => setTeamCount(Number(e.target.value))}
-            >
-              {Array.from({ length: 4 }, (_, index) => index + 1).map(count => (
-                <option key={count} value={count}>{count}</option>
-              ))}
-            </select>
-          </label>
+      {canGenerateTeams && (
+        <div style={{ padding: '1.5rem', backgroundColor: 'rgba(79, 163, 255, 0.08)', borderRadius: '8px', border: '1px solid rgba(79, 163, 255, 0.2)', marginBottom: '2rem' }}>
+          <h2 style={{marginTop: 0, color: '#ffffff'}}>Auto Generate Teams & Players</h2>
+          <p style={{ marginTop: 0, color: 'rgba(255, 255, 255, 0.8)' }}>
+            Select how many teams and players you want, then generate balanced rosters automatically.
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.8rem', alignItems: 'end' }}>
+            <label style={{ color: '#ffffff', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+              Teams
+              <select
+                value={teamCount}
+                onChange={(e) => setTeamCount(Number(e.target.value))}
+              >
+                {Array.from({ length: 4 }, (_, index) => index + 1).map(count => (
+                  <option key={count} value={count}>{count}</option>
+                ))}
+              </select>
+            </label>
 
-          <label style={{ color: '#ffffff', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-            Total Players
-            <select
-              value={playerCount}
-              onChange={(e) => setPlayerCount(Number(e.target.value))}
-            >
-              {Array.from({ length: 18 }, (_, index) => index + 1).map(count => (
-                <option key={count} value={count}>{count}</option>
-              ))}
-            </select>
-          </label>
+            <label style={{ color: '#ffffff', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+              Total Players
+              <select
+                value={playerCount}
+                onChange={(e) => setPlayerCount(Number(e.target.value))}
+              >
+                {Array.from({ length: 16 }, (_, index) => index + 1).map(count => (
+                  <option key={count} value={count}>{count}</option>
+                ))}
+              </select>
+            </label>
 
-          <button
-            onClick={generateTeamsAndPlayers}
-            disabled={isGenerating}
-            style={{padding: '0.7em 1.4em', fontSize: '0.95em', opacity: isGenerating ? 0.7 : 1, cursor: isGenerating ? 'not-allowed' : 'pointer'}}
-          >
-            {isGenerating ? 'Generating...' : 'Generate Teams'}
-          </button>
+            <button
+              onClick={generateTeamsAndPlayers}
+              disabled={isGenerating}
+              style={{padding: '0.7em 1.4em', fontSize: '0.95em', opacity: isGenerating ? 0.7 : 1, cursor: isGenerating ? 'not-allowed' : 'pointer'}}
+            >
+              {isGenerating ? 'Generating...' : 'Generate Teams'}
+            </button>
+          </div>
+
+          <p style={{ marginBottom: 0, marginTop: '0.9rem', color: 'rgba(255, 255, 255, 0.75)' }}>
+            Team size preview: {getBalancedRosterPreview().join(' / ')} players per team.
+          </p>
         </div>
-
-        <p style={{ marginBottom: 0, marginTop: '0.9rem', color: 'rgba(255, 255, 255, 0.75)' }}>
-          Team size preview: {getBalancedRosterPreview().join(' / ')} players per team.
-        </p>
-      </div>
+      )}
       
       {/* Recently Deleted Section */}
       <div style={{ padding: '2rem', backgroundColor: 'rgba(255, 255, 255, 0.03)', borderRadius: '12px', border: '1px solid rgba(79, 163, 255, 0.15)' }}>
@@ -653,8 +662,28 @@ function TeamCreation({
             teams.map(team => (
               <div key={team.id} style={{ padding: '1.5rem', backgroundColor: 'rgba(79, 163, 255, 0.12)', borderRadius: '8px', border: '1px solid rgba(79, 163, 255, 0.25)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                  <h3 style={{marginTop: 0, marginBottom: 0, color: '#ffffff', fontSize: '1.3em'}}>{team.name}</h3>
-                  <button onClick={() => removeTeam(team.id)} style={{ backgroundColor: '#ff4444' }}>Delete</button>
+                  <div>
+                    <h3 style={{marginTop: 0, marginBottom: '0.2rem', color: '#ffffff', fontSize: '1.3em'}}>{team.name}</h3>
+                    {(() => {
+                      const activeClaim = teamClaims.find(claim => {
+                        const timestamp = claim?.last_active_at || claim?.claimed_at
+                        if (!timestamp) return false
+                        return String(claim.team_id) === String(team.id) && (Date.now() - new Date(timestamp).getTime()) <= 20 * 60 * 1000
+                      })
+
+                      if (!activeClaim) {
+                        return <p style={{ margin: 0, color: '#86efac', fontSize: '0.82rem' }}>Team device is available</p>
+                      }
+
+                      return <p style={{ margin: 0, color: '#facc15', fontSize: '0.82rem' }}>Claimed by active device</p>
+                    })()}
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.4rem' }}>
+                    {onReleaseTeamClaim && (
+                      <button onClick={() => onReleaseTeamClaim(team.id)} style={{ backgroundColor: '#d97706' }}>Release</button>
+                    )}
+                    <button onClick={() => removeTeam(team.id)} style={{ backgroundColor: '#ff4444' }}>Delete</button>
+                  </div>
                 </div>
                 {team.players.length === 0 ? (
                   <p style={{ color: 'rgba(255, 255, 255, 0.5)', margin: 0 }}>No players yet</p>

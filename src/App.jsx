@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate, Link } from 'react-router-dom'
 import { supabase } from './supabaseClient'
 import TeamCreation from './components/TeamCreation'
@@ -14,7 +14,12 @@ const GAME_PHASES = {
   ROUND_2_LIVE: 3,
   ROUND_2_ENDED: 4
 }
+
+const CLAIM_TTL_MS = 20 * 60 * 1000
 const LOCAL_GAME_PHASE_KEY = 'local_game_phase'
+const LOCAL_TEAM_CLAIMS_KEY = 'local_team_claims'
+const LOCAL_CLIENT_ID_KEY = 'hooplytics_client_id'
+const LOCAL_CLAIMED_TEAM_KEY = 'hooplytics_claimed_team_id'
 
 const getRoundLabel = (phase) => {
   if (phase === GAME_PHASES.ROUND_1_LIVE) return 'Round 1 is live'
@@ -39,12 +44,178 @@ const getRoundOnePoints = (player) => {
     .reduce((sum, shot) => sum + Number(shot?.points || 0), 0)
 }
 
+const nowIso = () => new Date().toISOString()
+
+const isClaimActive = (claim) => {
+  const timestamp = claim?.last_active_at || claim?.claimed_at
+  if (!timestamp) return false
+  const parsed = new Date(timestamp).getTime()
+  if (!Number.isFinite(parsed)) return false
+  return (Date.now() - parsed) <= CLAIM_TTL_MS
+}
+
+const readLocalClaims = () => {
+  const raw = localStorage.getItem(LOCAL_TEAM_CLAIMS_KEY)
+  if (!raw) return []
+
+  try {
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+const writeLocalClaims = (claims) => {
+  localStorage.setItem(LOCAL_TEAM_CLAIMS_KEY, JSON.stringify(claims))
+}
+
+const getOrCreateClientId = () => {
+  const existingId = localStorage.getItem(LOCAL_CLIENT_ID_KEY)
+  if (existingId) return existingId
+
+  const generatedId = `client_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
+  localStorage.setItem(LOCAL_CLIENT_ID_KEY, generatedId)
+  return generatedId
+}
+
+function TeamJoinPanel({ teams, claims, claimedTeamId, onClaimTeam }) {
+  const activeClaims = claims.filter(isClaimActive)
+
+  const getClaimForTeam = (teamId) => activeClaims.find(claim => String(claim.team_id) === String(teamId))
+
+  return (
+    <div style={{ padding: '1rem' }}>
+      <h1 style={{ marginBottom: '0.4rem' }}>Join a Team Device</h1>
+      <p style={{ marginTop: 0, color: 'rgba(255,255,255,0.8)' }}>
+        Each classroom device can control exactly one team. Claims expire after 20 minutes of inactivity.
+      </p>
+
+      {claimedTeamId && (
+        <p style={{ color: '#86efac', fontWeight: 700 }}>
+          You are currently assigned to team ID {claimedTeamId}.
+        </p>
+      )}
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '0.8rem', marginTop: '1rem' }}>
+        {teams.map(team => {
+          const teamClaim = getClaimForTeam(team.id)
+          const isClaimed = Boolean(teamClaim)
+          const isYourTeam = String(claimedTeamId) === String(team.id)
+
+          return (
+            <div
+              key={team.id}
+              style={{
+                border: '1px solid rgba(79, 163, 255, 0.3)',
+                borderRadius: '10px',
+                padding: '0.9rem',
+                backgroundColor: 'rgba(79, 163, 255, 0.08)'
+              }}
+            >
+              <h3 style={{ margin: 0, color: '#fff' }}>{team.name}</h3>
+              <p style={{ margin: '0.35rem 0 0.7rem', color: 'rgba(255,255,255,0.75)' }}>
+                {isYourTeam ? 'Assigned to this device' : isClaimed ? 'Claimed by another device' : 'Available'}
+              </p>
+
+              <button
+                onClick={() => onClaimTeam(team.id)}
+                disabled={isClaimed && !isYourTeam}
+                style={{
+                  width: '100%',
+                  padding: '0.55rem 0.75rem',
+                  borderRadius: '8px',
+                  border: 'none',
+                  fontWeight: 700,
+                  cursor: (isClaimed && !isYourTeam) ? 'not-allowed' : 'pointer',
+                  backgroundColor: isYourTeam ? '#16a34a' : '#2563eb',
+                  color: '#fff',
+                  opacity: (isClaimed && !isYourTeam) ? 0.45 : 1
+                }}
+              >
+                {isYourTeam ? 'Joined' : 'Join Team'}
+              </button>
+            </div>
+          )
+        })}
+      </div>
+
+      {teams.length === 0 && (
+        <p style={{ color: 'rgba(255,255,255,0.8)' }}>
+          No teams generated yet. Wait for host to generate teams.
+        </p>
+      )}
+    </div>
+  )
+}
+
 function App() {
   const [userRole, setUserRole] = useState(null)
-  const [gameId, setGameId] = useState('34583d69-c4ea-4aa5-b208-612cc6a0a581');
+  const [gameId, setGameId] = useState('34583d69-c4ea-4aa5-b208-612cc6a0a581')
   const [currentRound, setCurrentRound] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [teams, setTeams] = useState([])
+  const [teamClaims, setTeamClaims] = useState([])
+  const [claimedTeamId, setClaimedTeamId] = useState(null)
   const hasSupabase = Boolean(supabase)
+  const [clientId] = useState(() => getOrCreateClientId())
+
+  const refreshTeams = useCallback(async () => {
+    if (hasSupabase) {
+      const { data, error } = await supabase
+        .from('teams')
+        .select('id, name')
+        .order('id', { ascending: true })
+
+      if (error) {
+        console.error('Error loading teams:', error)
+        return []
+      }
+
+      const loadedTeams = data || []
+      setTeams(loadedTeams)
+      return loadedTeams
+    }
+
+    const localTeams = JSON.parse(localStorage.getItem('teams') || '[]')
+    setTeams(localTeams)
+    return localTeams
+  }, [hasSupabase])
+
+  const refreshClaims = useCallback(async () => {
+    if (hasSupabase) {
+      const { data, error } = await supabase
+        .from('team_claims')
+        .select('team_id, client_id, claimed_at, last_active_at')
+
+      if (error) {
+        console.error('Error loading team claims:', error)
+        setTeamClaims([])
+        return []
+      }
+
+      const activeClaims = (data || []).filter(isClaimActive)
+      const expiredTeamIds = (data || [])
+        .filter(claim => !isClaimActive(claim))
+        .map(claim => claim.team_id)
+
+      if (expiredTeamIds.length > 0) {
+        await supabase
+          .from('team_claims')
+          .delete()
+          .in('team_id', expiredTeamIds)
+      }
+
+      setTeamClaims(activeClaims)
+      return activeClaims
+    }
+
+    const localClaims = readLocalClaims()
+    const activeClaims = localClaims.filter(isClaimActive)
+    writeLocalClaims(activeClaims)
+    setTeamClaims(activeClaims)
+    return activeClaims
+  }, [hasSupabase])
 
   useEffect(() => {
     if (!hasSupabase) {
@@ -56,10 +227,19 @@ function App() {
       }
 
       const syncLocalPhase = (event) => {
-        if (event.key !== LOCAL_GAME_PHASE_KEY || event.newValue == null) return
-        const nextPhase = Number(event.newValue)
-        if (Number.isInteger(nextPhase)) {
-          setCurrentRound(nextPhase)
+        if (event.key === LOCAL_GAME_PHASE_KEY && event.newValue != null) {
+          const nextPhase = Number(event.newValue)
+          if (Number.isInteger(nextPhase)) {
+            setCurrentRound(nextPhase)
+          }
+        }
+
+        if (event.key === LOCAL_TEAM_CLAIMS_KEY) {
+          refreshClaims()
+        }
+
+        if (event.key === 'teams') {
+          refreshTeams()
         }
       }
 
@@ -68,34 +248,224 @@ function App() {
       return () => window.removeEventListener('storage', syncLocalPhase)
     }
 
-    // 1. Fetch initial row to get the ID and current round
     const fetchGame = async () => {
       const { data, error } = await supabase
         .from('games')
         .select('id, current_round')
         .limit(1)
         .single()
-      
+
       if (data) {
         setGameId(data.id)
         setCurrentRound(data.current_round)
       } else if (error) {
-        console.error("Error fetching game:", error)
+        console.error('Error fetching game:', error)
       }
       setLoading(false)
     }
+
     fetchGame()
 
-    // 2. Realtime listener for the 'current_round' column
     const channel = supabase.channel('schema-db-changes')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'games' }, 
-        (payload) => {
-          setCurrentRound(payload.new.current_round)
-        }
-      ).subscribe()
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'games' }, (payload) => {
+        setCurrentRound(payload.new.current_round)
+      })
+      .subscribe()
 
     return () => supabase.removeChannel(channel)
-  }, [hasSupabase])
+  }, [hasSupabase, refreshClaims, refreshTeams])
+
+  useEffect(() => {
+    refreshTeams()
+    refreshClaims()
+  }, [refreshTeams, refreshClaims])
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      refreshTeams()
+      refreshClaims()
+    }, 15000)
+
+    return () => window.clearInterval(intervalId)
+  }, [refreshClaims, refreshTeams])
+
+  useEffect(() => {
+    if (!hasSupabase) return undefined
+
+    const channel = supabase
+      .channel('team-claim-sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'teams' }, () => refreshTeams())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'team_claims' }, () => refreshClaims())
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [hasSupabase, refreshClaims, refreshTeams])
+
+  useEffect(() => {
+    if (!claimedTeamId) return
+
+    const teamExists = teams.some(team => String(team.id) === String(claimedTeamId))
+    if (!teamExists) {
+      setClaimedTeamId(null)
+      localStorage.removeItem(LOCAL_CLAIMED_TEAM_KEY)
+    }
+  }, [claimedTeamId, teams])
+
+  useEffect(() => {
+    if (userRole !== 'player' || !claimedTeamId) return
+
+    const activeOwnClaim = teamClaims.find(claim =>
+      String(claim.team_id) === String(claimedTeamId) &&
+      claim.client_id === clientId &&
+      isClaimActive(claim)
+    )
+
+    if (!activeOwnClaim) {
+      setClaimedTeamId(null)
+      localStorage.removeItem(LOCAL_CLAIMED_TEAM_KEY)
+    }
+  }, [claimedTeamId, clientId, teamClaims, userRole])
+
+  useEffect(() => {
+    if (userRole !== 'player') return
+
+    const syncPlayerClaim = async () => {
+      const claims = await refreshClaims()
+      const persistedClaim = localStorage.getItem(LOCAL_CLAIMED_TEAM_KEY)
+
+      const activeOwnClaim = claims.find(claim => claim.client_id === clientId && isClaimActive(claim))
+      if (activeOwnClaim) {
+        setClaimedTeamId(activeOwnClaim.team_id)
+        localStorage.setItem(LOCAL_CLAIMED_TEAM_KEY, String(activeOwnClaim.team_id))
+        return
+      }
+
+      if (persistedClaim) {
+        localStorage.removeItem(LOCAL_CLAIMED_TEAM_KEY)
+      }
+      setClaimedTeamId(null)
+    }
+
+    syncPlayerClaim()
+  }, [clientId, refreshClaims, userRole])
+
+  useEffect(() => {
+    if (userRole !== 'player' || !claimedTeamId) return undefined
+
+    const heartbeat = async () => {
+      if (hasSupabase) {
+        await supabase
+          .from('team_claims')
+          .update({ last_active_at: nowIso() })
+          .eq('team_id', claimedTeamId)
+          .eq('client_id', clientId)
+      } else {
+        const claims = readLocalClaims()
+        const updatedClaims = claims.map(claim =>
+          String(claim.team_id) === String(claimedTeamId) && claim.client_id === clientId
+            ? { ...claim, last_active_at: nowIso() }
+            : claim
+        )
+        writeLocalClaims(updatedClaims)
+        setTeamClaims(updatedClaims.filter(isClaimActive))
+      }
+    }
+
+    heartbeat()
+    const intervalId = window.setInterval(heartbeat, 60 * 1000)
+
+    return () => window.clearInterval(intervalId)
+  }, [claimedTeamId, clientId, hasSupabase, userRole])
+
+  const clearAllClaims = async () => {
+    if (hasSupabase) {
+      const { error } = await supabase
+        .from('team_claims')
+        .delete()
+        .gte('team_id', 1)
+
+      if (error) {
+        console.error('Error clearing team claims:', error)
+        return false
+      }
+    } else {
+      writeLocalClaims([])
+      localStorage.removeItem(LOCAL_CLAIMED_TEAM_KEY)
+    }
+
+    setTeamClaims([])
+    setClaimedTeamId(null)
+    return true
+  }
+
+  const claimTeam = async (teamId) => {
+    const claims = await refreshClaims()
+    const teamClaim = claims.find(claim => String(claim.team_id) === String(teamId))
+    const existingOwnClaim = claims.find(claim => claim.client_id === clientId)
+
+    if (teamClaim && teamClaim.client_id !== clientId) {
+      alert('That team is already claimed by another device.')
+      return
+    }
+
+    if (existingOwnClaim && String(existingOwnClaim.team_id) !== String(teamId)) {
+      alert('This device already controls another team.')
+      return
+    }
+
+    const claimPayload = {
+      team_id: teamId,
+      client_id: clientId,
+      claimed_at: nowIso(),
+      last_active_at: nowIso()
+    }
+
+    if (hasSupabase) {
+      const { error } = await supabase
+        .from('team_claims')
+        .upsert([claimPayload], { onConflict: 'team_id' })
+
+      if (error) {
+        console.error('Error claiming team:', error)
+        alert('Could not claim this team. Ensure team_claims table exists.')
+        return
+      }
+    } else {
+      const localClaims = readLocalClaims().filter(claim => String(claim.team_id) !== String(teamId))
+      localClaims.push(claimPayload)
+      writeLocalClaims(localClaims)
+    }
+
+    setClaimedTeamId(teamId)
+    localStorage.setItem(LOCAL_CLAIMED_TEAM_KEY, String(teamId))
+    await refreshClaims()
+  }
+
+  const releaseTeamClaim = async (teamId) => {
+    if (hasSupabase) {
+      const { error } = await supabase
+        .from('team_claims')
+        .delete()
+        .eq('team_id', teamId)
+
+      if (error) {
+        console.error('Error releasing claim:', error)
+        return
+      }
+    } else {
+      const claims = readLocalClaims().filter(claim => String(claim.team_id) !== String(teamId))
+      writeLocalClaims(claims)
+    }
+
+    if (String(claimedTeamId) === String(teamId)) {
+      setClaimedTeamId(null)
+      localStorage.removeItem(LOCAL_CLAIMED_TEAM_KEY)
+    }
+
+    await refreshClaims()
+  }
 
   const updateGamePhase = async (nextPhase) => {
     if (!hasSupabase) {
@@ -256,6 +626,7 @@ function App() {
   }
   const handleStartRoundTwo = () => updateGamePhase(GAME_PHASES.ROUND_2_LIVE)
   const handleEndRoundTwo = () => updateGamePhase(GAME_PHASES.ROUND_2_ENDED)
+
   const handleEndGameAnytime = async () => {
     const shouldEnd = window.confirm('End the game now and show the final scoreboard?')
     if (!shouldEnd) return
@@ -267,9 +638,11 @@ function App() {
     const shouldRestart = window.confirm('Restart game and clear all shots from rounds 1 and 2?')
     if (!shouldRestart) return
 
-    const cleared = await clearAllShots()
-    if (!cleared) {
-      alert('Could not clear shot data. Please try again.')
+    const clearedShots = await clearAllShots()
+    const clearedClaims = await clearAllClaims()
+
+    if (!clearedShots || !clearedClaims) {
+      alert('Could not fully restart game. Please try again.')
       return
     }
 
@@ -289,8 +662,20 @@ function App() {
 
   const isRoundLive = currentRound === GAME_PHASES.ROUND_1_LIVE || currentRound === GAME_PHASES.ROUND_2_LIVE
   const activeScoringRound = currentRound === GAME_PHASES.ROUND_2_LIVE ? 2 : 1
+  const claimedTeamName = teams.find(team => String(team.id) === String(claimedTeamId))?.name || null
 
   const renderPlayerHome = () => {
+    if (!claimedTeamId) {
+      return (
+        <TeamJoinPanel
+          teams={teams}
+          claims={teamClaims}
+          claimedTeamId={claimedTeamId}
+          onClaimTeam={claimTeam}
+        />
+      )
+    }
+
     if (currentRound === GAME_PHASES.ROUND_1_LIVE || currentRound === GAME_PHASES.ROUND_2_LIVE) {
       return <Navigate to="/scoring" />
     }
@@ -326,8 +711,13 @@ function App() {
         )}
         <header className="app-header">
           <img className="uva-logo" src="uva logo.png" alt="UVA logo" width="64" />
-          <h1 onClick={() => {setUserRole(null);}} style={{cursor: 'pointer'}}>Hooplytics</h1>
-          <p style={{ marginLeft: 'auto', color: 'rgba(255, 255, 255, 0.8)', fontWeight: 600 }}>
+          <h1 onClick={() => { setUserRole(null) }} style={{ cursor: 'pointer' }}>Hooplytics</h1>
+          {userRole === 'player' && claimedTeamName && (
+            <p style={{ marginLeft: 'auto', marginRight: '0.8rem', color: '#86efac', fontWeight: 700 }}>
+              Your Team: {claimedTeamName}
+            </p>
+          )}
+          <p style={{ marginLeft: claimedTeamName ? 0 : 'auto', color: 'rgba(255, 255, 255, 0.8)', fontWeight: 600 }}>
             {getRoundLabel(currentRound)}
           </p>
         </header>
@@ -340,29 +730,43 @@ function App() {
         </nav>
 
         <Routes>
-          <Route path="/" element={
-            userRole === 'host' ? (
-              currentRound === GAME_PHASES.ROUND_2_ENDED ? (
-                <Navigate to="/scoreboard" />
-              ) : (
-                <TeamCreation
-                  currentRound={currentRound}
-                  onStartRoundOne={handleStartRoundOne}
-                  onEndRoundOne={handleEndRoundOne}
-                  onStartRoundTwo={handleStartRoundTwo}
-                  onEndRoundTwo={handleEndRoundTwo}
-                  onEndGameAnytime={handleEndGameAnytime}
-                />
-              )
-            ) : (
-              renderPlayerHome()
-            )
-          } />
+          <Route
+            path="/"
+            element={
+              userRole === 'host'
+                ? (
+                  currentRound === GAME_PHASES.ROUND_2_ENDED
+                    ? <Navigate to="/scoreboard" />
+                    : (
+                      <TeamCreation
+                        currentRound={currentRound}
+                        onStartRoundOne={handleStartRoundOne}
+                        onEndRoundOne={handleEndRoundOne}
+                        onStartRoundTwo={handleStartRoundTwo}
+                        onEndRoundTwo={handleEndRoundTwo}
+                        onEndGameAnytime={handleEndGameAnytime}
+                        teamClaims={teamClaims}
+                        onReleaseTeamClaim={releaseTeamClaim}
+                        onTeamsRegenerated={clearAllClaims}
+                      />
+                    )
+                )
+                : renderPlayerHome()
+            }
+          />
           <Route
             path="/scoring"
             element={
               isRoundLive
-                ? <Scoring lockedRound={activeScoringRound} roundLocked={true} />
+                ? (
+                  userRole === 'host'
+                    ? <Scoring lockedRound={activeScoringRound} roundLocked={true} isHost={true} />
+                    : (
+                      claimedTeamId
+                        ? <Scoring lockedRound={activeScoringRound} roundLocked={true} isHost={false} claimedTeamId={claimedTeamId} />
+                        : <Navigate to="/" />
+                    )
+                )
                 : <Navigate to="/" />
             }
           />
