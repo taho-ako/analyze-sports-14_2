@@ -21,8 +21,6 @@ const LOCAL_TEAM_CLAIMS_KEY = 'local_team_claims'
 const LOCAL_CLIENT_ID_KEY = 'hooplytics_client_id'
 const LOCAL_CLAIMED_TEAM_KEY = 'hooplytics_claimed_team_id'
 const LOCAL_HOST_CLAIM_KEY = 'hooplytics_host_claim'
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 const getRoundLabel = (phase) => {
   if (phase === GAME_PHASES.ROUND_1_LIVE) return 'Round 1 is live'
@@ -659,58 +657,42 @@ function App() {
     return () => window.clearInterval(intervalId)
   }, [clientId, hasSupabase, refreshHostClaim, userRole])
 
-  // Release claims when tab is closed or page is hidden.
+  // Release claims when tab is closed
   useEffect(() => {
-    const releaseClaimsOnExit = () => {
-      if (hasSupabase && SUPABASE_URL && SUPABASE_ANON_KEY) {
-        const headers = {
-          apikey: SUPABASE_ANON_KEY,
-          Authorization: `Bearer ${SUPABASE_ANON_KEY}`
-        }
-
-        if (claimedTeamId) {
-          const teamId = encodeURIComponent(String(claimedTeamId))
-          const exitClientId = encodeURIComponent(String(clientId))
-          fetch(`${SUPABASE_URL}/rest/v1/team_claims?team_id=eq.${teamId}&client_id=eq.${exitClientId}`, {
-            method: 'DELETE',
-            headers,
-            keepalive: true
-          }).catch(() => {})
-        }
-
-        if (userRole === 'host') {
-          const exitClientId = encodeURIComponent(String(clientId))
-          fetch(`${SUPABASE_URL}/rest/v1/host_claims?id=eq.1&client_id=eq.${exitClientId}`, {
-            method: 'DELETE',
-            headers,
-            keepalive: true
-          }).catch(() => {})
-        }
-
-        return
-      }
-
+    const handleBeforeUnload = async () => {
+      // Release team claim if exists
       if (claimedTeamId) {
-        const claims = readLocalClaims().filter(claim => String(claim.team_id) !== String(claimedTeamId))
-        writeLocalClaims(claims)
+        if (hasSupabase) {
+          await supabase
+            .from('team_claims')
+            .delete()
+            .eq('team_id', claimedTeamId)
+        } else {
+          const claims = readLocalClaims().filter(claim => String(claim.team_id) !== String(claimedTeamId))
+          writeLocalClaims(claims)
+        }
       }
 
+      // Release host claim if exists
       if (userRole === 'host') {
-        const localClaim = readLocalHostClaim()
-        if (localClaim?.client_id === clientId) {
-          writeLocalHostClaim(null)
+        if (hasSupabase) {
+          await supabase
+            .from('host_claims')
+            .delete()
+            .eq('id', 1)
+            .eq('client_id', clientId)
+        } else {
+          const localClaim = readLocalHostClaim()
+          if (localClaim?.client_id === clientId) {
+            writeLocalHostClaim(null)
+          }
         }
       }
     }
 
-    window.addEventListener('beforeunload', releaseClaimsOnExit)
-    window.addEventListener('pagehide', releaseClaimsOnExit)
-
-    return () => {
-      window.removeEventListener('beforeunload', releaseClaimsOnExit)
-      window.removeEventListener('pagehide', releaseClaimsOnExit)
-    }
-  }, [claimedTeamId, clientId, hasSupabase, userRole])
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [claimedTeamId, userRole, clientId, hasSupabase])
 
   const updateGamePhase = async (nextPhase) => {
     if (!hasSupabase) {
