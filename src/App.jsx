@@ -38,6 +38,16 @@ const getSnakeTeamOrder = (teamCount) => {
   return [...forward, ...backward]
 }
 
+const getBalancedTeamTargets = (teamCount, playerCount, maxPlayersPerTeam = 4) => {
+  if (teamCount <= 0 || playerCount < 0) return null
+  if (playerCount > teamCount * maxPlayersPerTeam) return null
+
+  const baseCount = Math.floor(playerCount / teamCount)
+  const extraPlayers = playerCount % teamCount
+
+  return Array.from({ length: teamCount }, (_, index) => baseCount + (index < extraPlayers ? 1 : 0))
+}
+
 const getRoundOnePoints = (player) => {
   const shots = Array.isArray(player?.shots) ? player.shots : []
   return shots
@@ -791,13 +801,37 @@ function App() {
           return String(left.name).localeCompare(String(right.name))
         })
 
+      const teamTargets = getBalancedTeamTargets(teamsList.length, rankedPlayers.length)
+      if (!teamTargets) {
+        console.error('Cannot rebalance teams: too many players for max 4 per team.')
+        return false
+      }
+
       const snakeOrder = getSnakeTeamOrder(teamsList.length)
       const assignments = new Map()
+      const assignedCounts = Array.from({ length: teamsList.length }, () => 0)
+      let snakePointer = 0
 
-      rankedPlayers.forEach((player, index) => {
-        const teamIndex = snakeOrder[index % snakeOrder.length]
-        assignments.set(player.id, teamsList[teamIndex].id)
-      })
+      for (const player of rankedPlayers) {
+        let chosenTeamIndex = -1
+
+        for (let offset = 0; offset < snakeOrder.length; offset++) {
+          const candidateIndex = snakeOrder[(snakePointer + offset) % snakeOrder.length]
+          if (assignedCounts[candidateIndex] < teamTargets[candidateIndex] && assignedCounts[candidateIndex] < 4) {
+            chosenTeamIndex = candidateIndex
+            snakePointer = (snakePointer + offset + 1) % snakeOrder.length
+            break
+          }
+        }
+
+        if (chosenTeamIndex === -1) {
+          console.error('Cannot rebalance teams: no team slot available for player assignment.')
+          return false
+        }
+
+        assignedCounts[chosenTeamIndex] += 1
+        assignments.set(player.id, teamsList[chosenTeamIndex].id)
+      }
 
       const updateResults = await Promise.all(
         rankedPlayers.map(player =>
@@ -847,15 +881,39 @@ function App() {
       ...team,
       players: []
     }))
-    const snakeOrder = getSnakeTeamOrder(resetTeams.length)
+    const teamTargets = getBalancedTeamTargets(resetTeams.length, playersWithPoints.length)
+    if (!teamTargets) {
+      console.error('Cannot rebalance teams: too many players for max 4 per team.')
+      return false
+    }
 
-    playersWithPoints.forEach((player, index) => {
-      const teamIndex = snakeOrder[index % snakeOrder.length]
-      resetTeams[teamIndex].players.push({
+    const snakeOrder = getSnakeTeamOrder(resetTeams.length)
+    const assignedCounts = Array.from({ length: resetTeams.length }, () => 0)
+    let snakePointer = 0
+
+    for (const player of playersWithPoints) {
+      let chosenTeamIndex = -1
+
+      for (let offset = 0; offset < snakeOrder.length; offset++) {
+        const candidateIndex = snakeOrder[(snakePointer + offset) % snakeOrder.length]
+        if (assignedCounts[candidateIndex] < teamTargets[candidateIndex] && assignedCounts[candidateIndex] < 4) {
+          chosenTeamIndex = candidateIndex
+          snakePointer = (snakePointer + offset + 1) % snakeOrder.length
+          break
+        }
+      }
+
+      if (chosenTeamIndex === -1) {
+        console.error('Cannot rebalance teams: no team slot available for player assignment.')
+        return false
+      }
+
+      assignedCounts[chosenTeamIndex] += 1
+      resetTeams[chosenTeamIndex].players.push({
         id: player.id,
         name: player.name
       })
-    })
+    }
 
     localStorage.setItem('teams', JSON.stringify(resetTeams))
     return true
@@ -865,7 +923,7 @@ function App() {
   const handleEndRoundOne = async () => {
     const sorted = await rebalanceTeamsAfterRoundOne()
     if (!sorted) {
-      alert('Could not sort teams fairly. Please try again.')
+      alert('Could not sort teams with current setup. Rebalance requires an even split with a max of 4 players per team.')
       return
     }
 
