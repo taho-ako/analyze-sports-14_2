@@ -2,6 +2,13 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../supabaseClient'
 
 const TEAM_COLOR_NAMES = ['Blue Team', 'Red Team', 'Green Team', 'Yellow Team']
+const GAME_PHASES = {
+  PRE_GAME: 0,
+  ROUND_1_LIVE: 1,
+  ROUND_1_ENDED: 2,
+  ROUND_2_LIVE: 3,
+  ROUND_2_ENDED: 4
+}
 
 const getGeneratedTeamNames = (totalTeams) => TEAM_COLOR_NAMES.slice(0, totalTeams)
 const idsMatch = (left, right) => String(left) === String(right)
@@ -36,7 +43,14 @@ const toLocalRestoredShot = (shot, playerId, shotId) => {
   }
 }
 
-function TeamCreation({ onStartGame, isGameStarted}) {
+function TeamCreation({
+  currentRound,
+  onStartRoundOne,
+  onEndRoundOne,
+  onStartRoundTwo,
+  onEndRoundTwo,
+  onEndGameAnytime
+}) {
   const [teams, setTeams] = useState([])
   const [teamCount, setTeamCount] = useState(4)
   const [playerCount, setPlayerCount] = useState(16)
@@ -102,7 +116,7 @@ function TeamCreation({ onStartGame, isGameStarted}) {
 
     window.addEventListener('beforeunload', handleUnload)
     return () => window.removeEventListener('beforeunload', handleUnload)
-  }, [fetchTeams])
+  }, [fetchTeams, currentRound])
 
   useEffect(() => {
     if (!supabase) return undefined
@@ -672,7 +686,7 @@ function TeamCreation({ onStartGame, isGameStarted}) {
         </div>
       </div>
 
-      {/* --- START GAME ACTION BAR --- */}
+      {/* --- HOST ROUND CONTROL ACTION BAR --- */}
       <div style={{
         position: 'fixed',
         bottom: '0',
@@ -687,27 +701,120 @@ function TeamCreation({ onStartGame, isGameStarted}) {
         boxShadow: '0 -15px 35px rgba(0,0,0,0.6)',
         zIndex: 100
       }}>
-        <button
-          onClick={onStartGame}
-          disabled={teams.length === 0}
-          className={!isGameStarted && teams.length > 0 ? 'start-btn-pulse' : ''}
-          style={{
-            padding: '1.25rem 4rem',
-            fontSize: '1.6rem',
-            fontWeight: '900',
-            backgroundColor: isGameStarted ? '#28a745' : '#E57200',
-            color: 'white',
-            border: 'none',
-            borderRadius: '16px',
-            cursor: teams.length === 0 ? 'not-allowed' : 'pointer',
-            transition: 'all 0.3s ease',
-            textTransform: 'uppercase',
-            letterSpacing: '1px',
-            opacity: teams.length === 0 ? 0.5 : 1
-          }}
-        >
-          {isGameStarted ? '✓ Game is Live' : 'Start Game for All Players'}
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.8rem', flexWrap: 'wrap' }}>
+          <span style={{ color: 'rgba(255, 255, 255, 0.85)', fontWeight: 700, letterSpacing: '0.4px' }}>
+            Host Round Controls:
+          </span>
+
+          {currentRound === GAME_PHASES.PRE_GAME && (
+            <button
+              onClick={onStartRoundOne}
+              disabled={teams.length === 0}
+              className={teams.length > 0 ? 'start-btn-pulse' : ''}
+              style={{
+                padding: '1rem 2rem',
+                fontSize: '1rem',
+                fontWeight: '900',
+                backgroundColor: '#E57200',
+                color: 'white',
+                border: 'none',
+                borderRadius: '12px',
+                cursor: teams.length === 0 ? 'not-allowed' : 'pointer',
+                transition: 'all 0.3s ease',
+                textTransform: 'uppercase',
+                opacity: teams.length === 0 ? 0.5 : 1
+              }}
+            >
+              Begin Round 1
+            </button>
+          )}
+
+          {currentRound === GAME_PHASES.ROUND_1_LIVE && (
+            <button
+              onClick={onEndRoundOne}
+              style={{
+                padding: '1rem 2rem',
+                fontSize: '1rem',
+                fontWeight: '900',
+                backgroundColor: '#f97316',
+                color: 'white',
+                border: 'none',
+                borderRadius: '12px',
+                cursor: 'pointer',
+                transition: 'all 0.3s ease',
+                textTransform: 'uppercase'
+              }}
+            >
+              End Round 1
+            </button>
+          )}
+
+          {currentRound === GAME_PHASES.ROUND_1_ENDED && (
+            <button
+              onClick={onStartRoundTwo}
+              style={{
+                padding: '1rem 2rem',
+                fontSize: '1rem',
+                fontWeight: '900',
+                backgroundColor: '#22c55e',
+                color: 'white',
+                border: 'none',
+                borderRadius: '12px',
+                cursor: 'pointer',
+                transition: 'all 0.3s ease',
+                textTransform: 'uppercase'
+              }}
+            >
+              Begin Round 2
+            </button>
+          )}
+
+          {currentRound === GAME_PHASES.ROUND_2_LIVE && (
+            <button
+              onClick={onEndRoundTwo}
+              style={{
+                padding: '1rem 2rem',
+                fontSize: '1rem',
+                fontWeight: '900',
+                backgroundColor: '#ef4444',
+                color: 'white',
+                border: 'none',
+                borderRadius: '12px',
+                cursor: 'pointer',
+                transition: 'all 0.3s ease',
+                textTransform: 'uppercase'
+              }}
+            >
+              End Round 2
+            </button>
+          )}
+
+          {currentRound !== GAME_PHASES.ROUND_2_ENDED && (
+            <button
+              onClick={onEndGameAnytime}
+              style={{
+                padding: '0.85rem 1.2rem',
+                fontSize: '0.9rem',
+                fontWeight: '800',
+                backgroundColor: 'rgba(239, 68, 68, 0.2)',
+                color: '#fecaca',
+                border: '1px solid rgba(239, 68, 68, 0.7)',
+                borderRadius: '10px',
+                cursor: 'pointer',
+                transition: 'all 0.3s ease',
+                textTransform: 'uppercase'
+              }}
+            >
+              End Game Now
+            </button>
+          )}
+
+          {currentRound === GAME_PHASES.ROUND_2_ENDED && (
+            <div style={{ color: '#86efac', fontWeight: 800, fontSize: '1rem' }}>
+              Game complete. Open Data View for final standings.
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Spacing element so footer doesn't cover content */}

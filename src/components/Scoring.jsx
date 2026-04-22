@@ -3,11 +3,11 @@ import { supabase } from '../supabaseClient'
 import { getZoneColor } from '../models/heatmapModel'
 import HeatmapCourt from './HeatmapCourt'
 
-function Scoring() {
+function Scoring({ lockedRound = null, roundLocked = false }) {
   const [teams, setTeams] = useState([])
   const [selectedTeamId, setSelectedTeamId] = useState(null)
   const [selectedPlayerId, setSelectedPlayerId] = useState(null)
-  const [currentRound, setCurrentRound] = useState(1)
+  const [currentRound, setCurrentRound] = useState(lockedRound || 1)
   const [warningMessage, setWarningMessage] = useState('')
   const [zoneStats, setZoneStats] = useState({})
   const [celebratingZones, setCelebratingZones] = useState({})
@@ -129,6 +129,7 @@ function Scoring() {
   }
 
   const handleRoundSelect = (round) => {
+    if (roundLocked) return
     setCurrentRound(round)
     setZoneStats({})
     setShots([])
@@ -139,6 +140,14 @@ function Scoring() {
       fetchZoneStats(selectedPlayer)
     }
   }, [selectedPlayer, currentRound, fetchZoneStats])
+
+  useEffect(() => {
+    if (!roundLocked || !lockedRound) return
+
+    setCurrentRound(lockedRound)
+    setZoneStats({})
+    setShots([])
+  }, [lockedRound, roundLocked])
 
   const recordShot = async (zone, made, event) => {
     if (!selectedPlayer || recordShotRef.current) return
@@ -360,30 +369,34 @@ function Scoring() {
       <div style={{ marginBottom: '1rem', padding: '1rem', backgroundColor: 'rgba(79, 163, 255, 0.08)', borderRadius: '8px', border: '1px solid rgba(79, 163, 255, 0.2)' }}>
         <h2 style={{marginTop: 0, color: '#ffffff'}}>Select Round</h2>
         <p style={{marginTop: 0, color: 'rgba(255, 255, 255, 0.8)'}}>
-          Round 1: individual scoring leaderboard by player points. Round 2: group scoring with a warning if a player exceeds 16 shots.
+          {roundLocked
+            ? `Host set this session to Round ${currentRound}. Round switching is locked.`
+            : 'Round 1: individual scoring leaderboard by player points. Round 2: group scoring with a warning if a player exceeds 16 shots.'}
         </p>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(140px, 1fr))', gap: '0.6rem', maxWidth: '340px' }}>
-          {[1, 2].map(round => (
-            <button
-              key={round}
-              onClick={() => handleRoundSelect(round)}
-              style={{
-                padding: '0.55rem 0.8rem',
-                fontSize: '14px',
-                fontWeight: 'bold',
-                border: '2px solid',
-                borderColor: currentRound === round ? '#4fa3ff' : 'rgba(79, 163, 255, 0.3)',
-                backgroundColor: currentRound === round ? 'rgba(79, 163, 255, 0.2)' : 'rgba(255, 255, 255, 0.05)',
-                color: '#ffffff',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                transition: 'all 0.2s'
-              }}
-            >
-              Round {round}
-            </button>
-          ))}
-        </div>
+        {!roundLocked && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(140px, 1fr))', gap: '0.6rem', maxWidth: '340px' }}>
+            {[1, 2].map(round => (
+              <button
+                key={round}
+                onClick={() => handleRoundSelect(round)}
+                style={{
+                  padding: '0.55rem 0.8rem',
+                  fontSize: '14px',
+                  fontWeight: 'bold',
+                  border: '2px solid',
+                  borderColor: currentRound === round ? '#4fa3ff' : 'rgba(79, 163, 255, 0.3)',
+                  backgroundColor: currentRound === round ? 'rgba(79, 163, 255, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                  color: '#ffffff',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+              >
+                Round {round}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       
       <div style={{ display: 'grid', gridTemplateColumns: selectedTeam ? 'repeat(auto-fit, minmax(280px, 1fr))' : '1fr', gap: '1rem', marginBottom: '1rem' }}>
