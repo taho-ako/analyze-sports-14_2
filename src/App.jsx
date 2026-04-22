@@ -283,6 +283,33 @@ function App() {
     return localHostClaim
   }, [hasSupabase])
 
+  const refreshGame = useCallback(async () => {
+    if (!hasSupabase) {
+      const storedPhase = Number(localStorage.getItem(LOCAL_GAME_PHASE_KEY))
+      if (Number.isInteger(storedPhase) && storedPhase >= GAME_PHASES.PRE_GAME && storedPhase <= GAME_PHASES.ROUND_2_ENDED) {
+        setCurrentRound(storedPhase)
+      }
+      return null
+    }
+
+    const { data, error } = await supabase
+      .from('games')
+      .select('id, current_round')
+      .limit(1)
+      .maybeSingle()
+
+    if (error) {
+      console.error('Error fetching game:', error)
+      return null
+    }
+
+    if (!data) return null
+
+    setGameId(data.id)
+    setCurrentRound(data.current_round)
+    return data
+  }, [hasSupabase])
+
   useEffect(() => {
     if (!hasSupabase) {
       const storedPhase = Number(localStorage.getItem(LOCAL_GAME_PHASE_KEY))
@@ -318,32 +345,14 @@ function App() {
       return () => window.removeEventListener('storage', syncLocalPhase)
     }
 
-    const fetchGame = async () => {
-      const { data, error } = await supabase
-        .from('games')
-        .select('id, current_round')
-        .limit(1)
-        .single()
-
-      if (data) {
-        setGameId(data.id)
-        setCurrentRound(data.current_round)
-      } else if (error) {
-        console.error('Error fetching game:', error)
-      }
-      setLoading(false)
-    }
-
-    fetchGame()
+    refreshGame().finally(() => setLoading(false))
 
     const channel = supabase.channel('schema-db-changes')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'games' }, (payload) => {
-        setCurrentRound(payload.new.current_round)
-      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'games' }, () => refreshGame())
       .subscribe()
 
     return () => supabase.removeChannel(channel)
-  }, [hasSupabase, refreshClaims, refreshHostClaim, refreshTeams])
+  }, [hasSupabase, refreshClaims, refreshGame, refreshHostClaim, refreshTeams])
 
   useEffect(() => {
     refreshTeams()
@@ -364,8 +373,19 @@ function App() {
   useEffect(() => {
     if (!hasSupabase) return undefined
 
+    const intervalId = window.setInterval(() => {
+      refreshGame()
+    }, 3000)
+
+    return () => window.clearInterval(intervalId)
+  }, [hasSupabase, refreshGame])
+
+  useEffect(() => {
+    if (!hasSupabase) return undefined
+
     const channel = supabase
       .channel('team-claim-sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'games' }, () => refreshGame())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'teams' }, () => refreshTeams())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'team_claims' }, () => refreshClaims())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'host_claims' }, () => refreshHostClaim())
@@ -374,7 +394,7 @@ function App() {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [hasSupabase, refreshClaims, refreshHostClaim, refreshTeams])
+  }, [hasSupabase, refreshClaims, refreshGame, refreshHostClaim, refreshTeams])
 
   useEffect(() => {
     if (!claimedTeamId) return
