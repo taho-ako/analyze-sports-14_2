@@ -534,6 +534,10 @@ function App() {
       last_active_at: nowIso()
     }
 
+    // Set claimed team ID immediately for UI consistency
+    setClaimedTeamId(teamId)
+    localStorage.setItem(LOCAL_CLAIMED_TEAM_KEY, String(teamId))
+
     if (hasSupabase) {
       const { error } = await supabase
         .from('team_claims')
@@ -550,8 +554,6 @@ function App() {
       writeLocalClaims(localClaims)
     }
 
-    setClaimedTeamId(teamId)
-    localStorage.setItem(LOCAL_CLAIMED_TEAM_KEY, String(teamId))
     await refreshClaims()
   }
 
@@ -654,6 +656,43 @@ function App() {
 
     return () => window.clearInterval(intervalId)
   }, [clientId, hasSupabase, refreshHostClaim, userRole])
+
+  // Release claims when tab is closed
+  useEffect(() => {
+    const handleBeforeUnload = async () => {
+      // Release team claim if exists
+      if (claimedTeamId) {
+        if (hasSupabase) {
+          await supabase
+            .from('team_claims')
+            .delete()
+            .eq('team_id', claimedTeamId)
+        } else {
+          const claims = readLocalClaims().filter(claim => String(claim.team_id) !== String(claimedTeamId))
+          writeLocalClaims(claims)
+        }
+      }
+
+      // Release host claim if exists
+      if (userRole === 'host') {
+        if (hasSupabase) {
+          await supabase
+            .from('host_claims')
+            .delete()
+            .eq('id', 1)
+            .eq('client_id', clientId)
+        } else {
+          const localClaim = readLocalHostClaim()
+          if (localClaim?.client_id === clientId) {
+            writeLocalHostClaim(null)
+          }
+        }
+      }
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [claimedTeamId, userRole, clientId, hasSupabase])
 
   const updateGamePhase = async (nextPhase) => {
     if (!hasSupabase) {
